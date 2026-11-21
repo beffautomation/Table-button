@@ -69,6 +69,11 @@ section[hidden] { display: none; }
 .seatlist.sorting, .seatlist.sorting * { user-select: none; -webkit-user-select: none; }
 details > .seatlist { margin-top: 10px; }
 .hint { font-size: 13px; color: var(--mute); }
+.timerbox { display: flex; flex-direction: column; gap: 10px; }
+.timerbox .seg { align-self: flex-start; }
+.timerbox .custom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--mute); font-size: 14px; }
+input.num[type=text] { flex: none; width: 58px; text-align: center; padding: 9px 4px; font-variant-numeric: tabular-nums; }
+details > .timerbox { margin-top: 10px; }
 .seatlist li { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px 8px 6px 4px; }
 .dot { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--c); }
 .who { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
@@ -193,11 +198,18 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
       <label for="gameInput">Game name (optional)</label>
       <input type="text" id="gameInput" maxlength="30" autocomplete="off" placeholder="Shown at the top of every phone">
     </div>
-    <div class="setting"><span>Turn timer</span><div class="seg" id="limitSeg"></div></div>
+    <div class="setting" style="flex-direction:column;align-items:stretch;gap:8px"><span>Turn timer</span><div class="timerbox" id="timerLobby"></div></div>
     <div class="setting"><label for="rotToggle" style="font-size:16px;color:var(--text)">Pass first player each round</label><input type="checkbox" id="rotToggle"></div>
     <button class="btn primary" id="startBtn" type="button">Start game</button>
     <p class="lede" id="startHint"></p>
+    <button class="btn" id="hostBtn" type="button" hidden>The host is away. Make me the host</button>
     <button class="btn ghost" id="leaveBtn" type="button">Leave this table</button>
+  </section>
+
+  <section id="claim" hidden>
+    <h2>Which player are you?</h2>
+    <p class="hint">Tap your name to take your seat back on this phone.</p>
+    <div id="claimList" style="display:flex;flex-direction:column;gap:8px"></div>
   </section>
 
   <section id="play" hidden>
@@ -216,6 +228,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
       <button class="btn" id="pauseBtn" type="button">Pause</button>
       <button class="btn" id="allBtn" type="button" style="grid-column:1/-1">Everyone plays at once</button>
     </div>
+    <details><summary>Turn timer: <span id="timerSmall"></span></summary><div class="timerbox" id="timerPlay"></div></details>
     <details id="orderBox"><summary>Change turn order</summary><ol id="playSeats" class="seatlist"></ol><p class="hint" style="margin-top:8px">Drag the handle. The current turn stays with the same player.</p></details>
     <details><summary>Table code <span id="codeSmall"></span></summary><div class="invite"><span class="link" id="linkSmall"></span></div></details>
     <details><summary>Time per player</summary><table id="liveStats"></table></details>
@@ -226,7 +239,9 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
     <h1>Game over</h1>
     <p class="lede" id="doneLine"></p>
     <table id="finalStats"></table>
-    <button class="btn primary" id="againBtn" type="button">Play again, same seats</button>
+    <button class="btn primary" id="resumeBtn" type="button">Ended by mistake? Resume this game</button>
+    <button class="btn" id="againBtn" type="button">Start a new game, same seats</button>
+    <p class="hint" id="againHint"></p>
     <button class="btn" id="lobbyBtn" type="button">Change players or rules</button>
   </section>
 </div>
@@ -240,10 +255,12 @@ const $ = id => document.getElementById(id);
 const COLORS = [['Red','#ff5a4f'],['Orange','#ff9838'],['Gold','#f5c93b'],['Lime','#a9e34b'],['Green','#3ddc84'],['Teal','#2fd3c4'],['Sky','#4cc3ff'],['Blue','#5b8cff'],['Violet','#a57bff'],['Pink','#ff6fb5']];
 const LIMITS = [0, 30, 60, 120, 300];
 const LIMIT_NAMES = ['Off', '30s', '1m', '2m', '5m'];
+const MAX_LIMIT = 3600;
+const limitName = s => !s ? 'Off' : s < 60 ? s + 's' : s % 60 ? Math.floor(s / 60) + 'm ' + (s % 60) + 's' : (s / 60) + 'm';
 const rand = () => Math.random().toString(36).slice(2, 10) || 'x';
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-const blank = () => ({ v: 1, rev: 0, tie: '', phase: 'lobby', players: [], cur: 0, first: 0, round: 1, start: 0, paused: 0, limit: 0, rot: false, mode: 'turn', aid: '', done: [], hold: 0, h: null, game: '' });
+const blank = () => ({ v: 1, rev: 0, tie: '', phase: 'lobby', players: [], cur: 0, first: 0, round: 1, start: 0, paused: 0, limit: 0, rot: false, mode: 'turn', aid: '', done: [], hold: 0, h: null, game: '', host: '' });
 const int = (x, lo, hi, d) => Number.isFinite(x) ? Math.min(hi, Math.max(lo, Math.floor(x))) : d;
 
 // Everything arriving from another phone passes through here.
@@ -265,9 +282,10 @@ function validate(g) {
   return { v: 1, rev: Math.floor(g.rev), tie: String(g.tie ?? '').slice(0, 12), phase: g.phase, players,
     cur: int(g.cur, 0, top, 0), first: int(g.first, 0, top, 0), round: int(g.round, 1, 1e6, 1),
     start: int(g.start, 0, 1e14, 0), paused: int(g.paused, 0, 1e14, 0),
-    limit: LIMITS.includes(g.limit) ? g.limit : 0, rot: !!g.rot, mode: g.mode === 'all' ? 'all' : 'turn',
+    limit: int(g.limit, 0, MAX_LIMIT, 0), rot: !!g.rot, mode: g.mode === 'all' ? 'all' : 'turn',
     aid: String(g.aid ?? '').slice(0, 12), done: Array.isArray(g.done) ? g.done.filter(x => seen.has(x)).slice(0, 10) : [],
-    hold: int(g.hold, 0, 1e9, 0), h, game: typeof g.game === 'string' ? g.game.replace(/\s+/g, ' ').trim().slice(0, 30) : '' };
+    hold: int(g.hold, 0, 1e9, 0), h, game: typeof g.game === 'string' ? g.game.replace(/\s+/g, ' ').trim().slice(0, 30) : '',
+    host: typeof g.host === 'string' && /^[a-z0-9]{1,16}$/.test(g.host) ? g.host : '' };
 }
 const newer = (a, b) => a.rev > b.rev || (a.rev === b.rev && a.tie > b.tie);
 
@@ -294,16 +312,16 @@ function flush() {
 function schedule() { if (!syncTimer) syncTimer = setTimeout(() => { syncTimer = 0; flush(); }, 120 + Math.random() * 480); }
 function beat(bye) {
   const seat = S.players.some(p => p.id === myId) ? myId : null;
-  const body = JSON.stringify(bye ? { c: clientId, bye: 1 } : { c: clientId, seat });
+  const body = JSON.stringify(bye ? { c: clientId, bye: 1 } : { c: clientId, seat, d: myId });
   for (const l of links) if (l.up) { try { l.c.publish(topic('p'), body, { qos: 0 }); } catch {} }
-  peerMap.set(clientId, { seat, at: Date.now(), me: true });
+  peerMap.set(clientId, { seat, d: myId, at: Date.now(), me: true });
   refreshPeers();
 }
 function refreshPeers() {
   const now = Date.now();
   for (const [k, v] of peerMap) if (!v.me && now - v.at > 13000) peerMap.delete(k);
   peers = [...peerMap.values()];
-  const sig = peers.map(p => p.seat || '-').sort().join(',') + '|' + anyUp();
+  const sig = peers.map(p => (p.seat || '-') + '/' + (p.d || '-')).sort().join(',') + '|' + anyUp();
   if (sig !== liveSig) { liveSig = sig; renderSync(); render(); }
 }
 function commit(mutate) {
@@ -326,7 +344,7 @@ function onMessage(link, t, txt) {
     try {
       const m = JSON.parse(txt);
       if (!m || typeof m.c !== 'string' || m.c.length > 40 || m.c === clientId) return;
-      if (m.bye) peerMap.delete(m.c); else peerMap.set(m.c, { seat: typeof m.seat === 'string' ? m.seat : null, at: Date.now() });
+      if (m.bye) peerMap.delete(m.c); else peerMap.set(m.c, { seat: typeof m.seat === 'string' ? m.seat : null, d: typeof m.d === 'string' ? m.d.slice(0, 16) : '', at: Date.now() });
       refreshPeers();
     } catch {}
   } else if (kind === 'hello' && txt !== clientId) { link.seen = ''; schedule(); beat(); }
@@ -427,9 +445,18 @@ function makeSortable(list) {
 const GRIP = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="7" cy="5" r="1.6"/><circle cx="13" cy="5" r="1.6"/><circle cx="7" cy="10" r="1.6"/><circle cx="13" cy="10" r="1.6"/><circle cx="7" cy="15" r="1.6"/><circle cx="13" cy="15" r="1.6"/></svg>';
 function gripFor(p) { const b = h('button', { class: 'grip', type: 'button', 'aria-label': 'Reorder ' + p.n + '. Drag, or use the up and down arrow keys' }); b.innerHTML = GRIP; return b; }
 function addSeat(id, n, c) {
-  commit(s => { if (s.phase === 'lobby' && s.players.length < 10 && !s.players.some(p => p.id === id)) s.players.push({ id, n, c, t: 0, k: 0, mx: 0 }); });
+  commit(s => { if (s.phase === 'lobby' && s.players.length < 10 && !s.players.some(p => p.id === id)) { s.players.push({ id, n, c, t: 0, k: 0, mx: 0 }); if (!s.host) s.host = myId; } });
 }
+// The host is the phone that started the table. Only the host starts a game.
+const isHost = () => !S.host || S.host === myId;
+const hostHere = () => !S.host || peers.some(p => p.d === S.host);
+const hostName = () => { const p = S.players.find(x => x.id === S.host); return p ? p.n : 'the host'; };
+function setLimit(v) { v = int(v, 0, MAX_LIMIT, 0); commit(s => { s.limit = v; }); }
+function endGame() { commit(s => { if (s.phase !== 'play') return; if (!s.paused) s.paused = Date.now(); s.phase = 'done'; }); }
+// Ending freezes the clock, so resuming picks the turn up exactly where it stopped.
+function resumeGame() { commit(s => { if (s.phase !== 'done') return; const now = Date.now(); if (s.paused) s.start += now - s.paused; s.paused = 0; s.phase = 'play'; }); }
 function startGame() {
+  if (!isHost()) return;
   commit(s => {
     if (s.players.length < 2) return;
     s.players.forEach(p => { p.t = 0; p.k = 0; p.mx = 0; });
@@ -514,6 +541,38 @@ function renderInvite() {
   }
   $('shareBtn').hidden = !navigator.share;
 }
+function buildTimer(box, key) {
+  const seg = h('div', { class: 'seg' });
+  LIMITS.forEach((v, i) => seg.append(h('button', { type: 'button', text: LIMIT_NAMES[i], 'aria-pressed': 'false', onclick: () => setLimit(v) })));
+  const min = h('input', { type: 'text', class: 'num', id: key + 'Min', inputmode: 'numeric', maxlength: '2', autocomplete: 'off', 'aria-label': 'Custom timer minutes', placeholder: '0' });
+  const sec = h('input', { type: 'text', class: 'num', id: key + 'Sec', inputmode: 'numeric', maxlength: '3', autocomplete: 'off', 'aria-label': 'Custom timer seconds', placeholder: '0' });
+  const apply = () => { const v = (parseInt(min.value, 10) || 0) * 60 + (parseInt(sec.value, 10) || 0); min.blur(); sec.blur(); setLimit(v); paintTimer(box); };
+  const form = h('form', { class: 'custom' }, h('span', { text: 'Custom' }), min, h('span', { text: 'min' }), sec, h('span', { text: 'sec' }), h('button', { class: 'btn small', type: 'submit', text: 'Set timer' }));
+  form.addEventListener('submit', e => { e.preventDefault(); apply(); });
+  box.append(seg, form);
+}
+function paintTimer(box) {
+  const [seg, form] = box.children;
+  [...seg.children].forEach((b, i) => b.setAttribute('aria-pressed', String(LIMITS[i] === S.limit)));
+  if (form.contains(document.activeElement)) return;
+  const [min, sec] = form.querySelectorAll('input');
+  min.value = S.limit ? String(Math.floor(S.limit / 60)) : ''; sec.value = S.limit ? String(S.limit % 60) : '';
+}
+function claimSeat(id) { myId = id; lsSet('turnlight-id', myId); pendingSeat = null; lastKey = null; beat(); render(); }
+// A phone with no seat (site closed and reopened in another browser, cleared
+// storage, new phone) can take back any seat that no connected phone is using.
+function renderClaim() {
+  const show = !!roomCode && S.phase !== 'lobby' && mySeat() < 0 && S.players.length > 0;
+  $('claim').hidden = !show;
+  if (!show) return;
+  const live = liveSeats(), box = $('claimList');
+  box.replaceChildren();
+  for (const p of S.players) {
+    const used = live.has(p.id);
+    box.append(h('button', { class: 'btn', type: 'button', disabled: used, style: 'display:flex;align-items:center;gap:10px;text-align:left', onclick: () => claimSeat(p.id) },
+      h('span', { class: 'dot', style: '--c:' + COLORS[p.c][1] }), h('span', { class: 'who', text: p.n }, h('small', { text: used ? 'In use on another phone' : "I'm " + p.n }))));
+  }
+}
 function renderSwatches() {
   const taken = new Set(S.players.map(p => p.c));
   if (taken.has(draftColor)) { const free = COLORS.findIndex((_, i) => !taken.has(i)); if (free >= 0) draftColor = free; }
@@ -527,11 +586,11 @@ function renderLobby() {
     list.replaceChildren();
     S.players.forEach((p, i) => {
       const mine = p.id === myId;
-      const note = mine ? 'This phone' : live.has(p.id) ? 'Phone connected' : 'No phone yet';
+      const note = (mine ? 'This phone' : live.has(p.id) ? 'Phone connected' : 'No phone yet') + (p.id === S.host ? ' · Host' : '');
       const who = h('span', { class: 'who', text: (i + 1) + '. ' + p.n }, h('small', { text: note }));
       const li = h('li', null, gripFor(p),
         h('span', { class: 'dot', style: '--c:' + COLORS[p.c][1] }), who,
-        me < 0 && !live.has(p.id) ? h('button', { class: 'btn small', type: 'button', text: "That's me", onclick: () => { myId = p.id; lsSet('turnlight-id', myId); beat(); render(); } }) : null,
+        me < 0 && !live.has(p.id) ? h('button', { class: 'btn small', type: 'button', text: "That's me", onclick: () => claimSeat(p.id) }) : null,
         h('button', { class: 'btn small', type: 'button', 'aria-label': 'Remove ' + p.n, text: '✕', onclick: () => { if (mine) pendingSeat = null; commit(s => { s.players = s.players.filter(x => x.id !== p.id); }); } }));
       li.dataset.id = p.id;
       list.append(li);
@@ -545,10 +604,12 @@ function renderLobby() {
   $('seatBtn').textContent = me < 0 ? 'Take a seat' : 'Add player';
   $('seatBtn').disabled = full; $('nameInput').disabled = full;
   renderSwatches();
-  [...$('limitSeg').children].forEach((b, i) => b.setAttribute('aria-pressed', String(LIMITS[i] === S.limit)));
+  paintTimer($('timerLobby'));
   $('rotToggle').checked = S.rot;
-  $('startBtn').disabled = S.players.length < 2;
-  $('startHint').textContent = S.players.length < 2 ? 'Seat at least two players to start.' : full ? 'The table is full at 10 players.' : '';
+  const host = isHost();
+  $('startBtn').disabled = S.players.length < 2 || !host;
+  $('startHint').textContent = !host ? 'Only ' + hostName() + ' can start the game.' : S.players.length < 2 ? 'Seat at least two players to start.' : full ? 'The table is full at 10 players.' : '';
+  $('hostBtn').hidden = host || hostHere() || Date.now() - enteredAt < 8000;
 }
 function statsTable(el) {
   el.replaceChildren(h('tr', null, h('th', { text: 'Player' }), h('th', { text: 'Turns' }), h('th', { text: 'Total' }), h('th', { text: 'Average' }), h('th', { text: 'Longest' })));
@@ -585,7 +646,8 @@ function renderPlay() {
   $('ring').className = 'ring ' + state + (S.paused ? ' paused' : '');
   $('orbLabel').textContent = label; $('orbHint').textContent = hint;
   $('roundLabel').textContent = 'Round ' + S.round;
-  $('modeLabel').textContent = S.limit ? LIMIT_NAMES[LIMITS.indexOf(S.limit)] + ' per turn' : 'No turn timer';
+  $('modeLabel').textContent = S.limit ? limitName(S.limit) + ' per turn' : 'No turn timer';
+  $('timerSmall').textContent = limitName(S.limit); paintTimer($('timerPlay'));
   const order = $('order'); order.replaceChildren();
   seq.forEach((i, pos) => order.append(h('li', null, h('span', { class: 'dot', style: '--c:' + COLORS[S.players[i].c][1] }), S.players[i].n + (i === me ? ' (you)' : '') + (pos === 0 ? ' · now' : pos === 1 ? ' · next' : ''))));
   const proxy = $('proxyBtn');
@@ -610,6 +672,7 @@ function render() {
   if ($('markText').textContent !== title) { $('markText').textContent = title; document.title = title === 'Turnlight' ? title : title + ' · Turnlight'; }
   $('home').hidden = !!roomCode;
   $('lobby').hidden = !roomCode || S.phase !== 'lobby'; $('play').hidden = !roomCode || S.phase !== 'play'; $('done').hidden = !roomCode || S.phase !== 'done';
+  renderClaim();
   if (!roomCode) { setColor(); return; }
   renderInvite();
   if (S.phase === 'lobby') { renderLobby(); setColor(); }
@@ -618,6 +681,8 @@ function render() {
     const turns = S.players.reduce((a, p) => a + p.k, 0), total = S.players.reduce((a, p) => a + p.t, 0);
     $('doneLine').textContent = turns + ' turns over ' + S.round + (S.round === 1 ? ' round, ' : ' rounds, ') + fmt(total) + ' of thinking time.';
     statsTable($('finalStats')); setColor();
+    $('againBtn').disabled = !isHost();
+    $('againHint').textContent = isHost() ? '' : 'Only ' + hostName() + ' can start a new game.';
   }
   const key = [S.phase, S.mode, S.cur, S.round, S.aid, S.start].join('|');
   if (lastKey !== null && key !== lastKey && S.phase === 'play' && !S.paused) {
@@ -651,12 +716,16 @@ function wake() {
 /* ---------- wiring ---------- */
 function wire() {
   document.addEventListener('click', wake);
-  LIMITS.forEach((v, i) => $('limitSeg').append(h('button', { type: 'button', text: LIMIT_NAMES[i], 'aria-pressed': 'false', onclick: () => commit(s => { s.limit = v; }) })));
+  buildTimer($('timerLobby'), 'lobbyTimer'); buildTimer($('timerPlay'), 'playTimer');
   $('rotToggle').addEventListener('change', e => commit(s => { s.rot = e.target.checked; }));
   $('seatForm').addEventListener('submit', e => {
     e.preventDefault();
     const input = $('nameInput'), n = input.value.trim().slice(0, 14);
     if (!n) { input.focus(); return; }
+    if (mySeat() < 0) {
+      const live = liveSeats(), old = S.players.find(p => p.n.toLowerCase() === n.toLowerCase() && !live.has(p.id));
+      if (old) { input.value = ''; claimSeat(old.id); return; }
+    }
     const own = mySeat() < 0, id = own ? myId : rand();
     if (own) pendingSeat = { id, n, c: draftColor, until: Date.now() + 4000 };
     addSeat(id, n, draftColor); input.value = '';
@@ -677,16 +746,18 @@ function wire() {
   $('allBtn').addEventListener('click', toggleAll);
   let armed = 0;
   $('endBtn').addEventListener('click', e => {
-    if (Date.now() < armed) { armed = 0; e.target.textContent = 'End game'; commit(s => { s.phase = 'done'; s.mode = 'turn'; s.paused = 0; }); return; }
+    if (Date.now() < armed) { armed = 0; e.target.textContent = 'End game'; endGame(); return; }
     armed = Date.now() + 3000; e.target.textContent = 'Tap again to end the game';
     setTimeout(() => { if (armed && Date.now() >= armed) { armed = 0; e.target.textContent = 'End game'; } }, 3100);
   });
   $('againBtn').addEventListener('click', startGame);
+  $('resumeBtn').addEventListener('click', resumeGame);
+  $('hostBtn').addEventListener('click', () => commit(s => { s.host = myId; }));
   $('lobbyBtn').addEventListener('click', () => commit(s => { s.phase = 'lobby'; }));
   $('soundBtn').addEventListener('click', e => { sound = !sound; lsSet('turnlight-sound', sound ? '1' : '0'); e.target.textContent = sound ? 'Sound on' : 'Sound off'; e.target.setAttribute('aria-pressed', String(sound)); });
   setInterval(paint, 250);
   setInterval(() => { if (roomCode) beat(); }, 4000);
-  $('newBtn').addEventListener('click', () => { let c = ''; const abc = 'abcdefghjkmnpqrstuvwxyz23456789'; for (let i = 0; i < 6; i++) c += abc[Math.floor(Math.random() * abc.length)]; enterRoom(c); });
+  $('newBtn').addEventListener('click', () => { let c = ''; const abc = 'abcdefghjkmnpqrstuvwxyz23456789'; for (let i = 0; i < 6; i++) c += abc[Math.floor(Math.random() * abc.length)]; enterRoom(c); if (!S.host) commit(s => { s.host = myId; }); });
   $('joinForm').addEventListener('submit', e => { e.preventDefault(); const c = cleanCode($('codeInput').value); if (c) enterRoom(c); else $('codeInput').focus(); });
   $('rejoinBtn').addEventListener('click', () => { const c = cleanCode(lsGet('turnlight-last') || ''); if (c) enterRoom(c); });
   $('leaveBtn').addEventListener('click', () => { lsSet('turnlight-last', ''); location.hash = ''; });
@@ -696,12 +767,13 @@ function wire() {
   });
   $('shareBtn').addEventListener('click', () => { try { navigator.share({ title: 'Turnlight', text: 'Join my table on Turnlight', url: tableLink() }).catch(() => {}); } catch {} });
   window.addEventListener('hashchange', () => { if (cleanCode(location.hash.slice(1)) !== roomCode) location.reload(); });
-  window.addEventListener('pagehide', () => beat(true));
+  window.addEventListener('pagehide', () => { if (roomCode) beat(true); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && roomCode) { beat(); schedule(); wake(); } });
 }
 const cleanCode = x => { const c = String(x).trim().toLowerCase().replace(/[^a-z0-9]/g, ''); return c.length >= 4 && c.length <= 12 ? c : ''; };
+let enteredAt = 0;
 function enterRoom(code) {
-  roomCode = code; lsSet('turnlight-last', code);
+  roomCode = code; enteredAt = Date.now(); setTimeout(render, 8600); lsSet('turnlight-last', code);
   if (cleanCode(location.hash.slice(1)) !== code) location.hash = code;
   let saved = null; try { saved = validate(JSON.parse(lsGet('turnlight-state-' + code))); } catch {}
   if (saved) S = saved;
