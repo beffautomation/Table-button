@@ -211,6 +211,11 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
       <label for="gameInput">Game name (optional)</label>
       <input type="text" id="gameInput" maxlength="36" autocomplete="off" placeholder="Shown at the top, with matching art">
     </div>
+    <div class="setting" style="flex-direction:column;align-items:stretch;gap:6px">
+      <label for="artInput">Background picture link (optional)</label>
+      <input type="text" id="artInput" maxlength="600" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url" placeholder="Paste an image address to use your own">
+      <span class="hint" id="artHint">Leave empty to look for a picture of the game automatically.</span>
+    </div>
     <div class="setting" style="flex-direction:column;align-items:stretch;gap:8px"><span>Turn timer</span><div class="timerbox" id="timerLobby"></div></div>
     <div class="setting"><label for="rotToggle" style="font-size:16px;color:var(--text)">Pass first player each round</label><input type="checkbox" id="rotToggle"></div>
     <button class="btn primary" id="startBtn" type="button">Start game</button>
@@ -261,7 +266,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
     <p class="hint" id="againHint"></p>
     <button class="btn" id="lobbyBtn" type="button">Change players or rules</button>
   </section>
-  <p class="credit" id="artCredit" hidden>Background photo from <a id="artLink" target="_blank" rel="noopener">Wikimedia</a></p>
+  <p class="credit" id="artCredit" hidden><a id="artLink" target="_blank" rel="noopener">Background picture source</a></p>
 </div>
 
 <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
@@ -278,7 +283,7 @@ const limitName = s => !s ? 'Off' : s < 60 ? s + 's' : s % 60 ? Math.floor(s / 6
 const rand = () => Math.random().toString(36).slice(2, 10) || 'x';
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-const blank = () => ({ v: 1, rev: 0, tie: '', phase: 'lobby', players: [], cur: 0, first: 0, round: 1, start: 0, paused: 0, limit: 0, rot: false, mode: 'turn', aid: '', done: [], hold: 0, h: null, game: '', host: '' });
+const blank = () => ({ v: 1, rev: 0, tie: '', phase: 'lobby', players: [], cur: 0, first: 0, round: 1, start: 0, paused: 0, limit: 0, rot: false, mode: 'turn', aid: '', done: [], hold: 0, h: null, game: '', host: '', art: '' });
 const int = (x, lo, hi, d) => Number.isFinite(x) ? Math.min(hi, Math.max(lo, Math.floor(x))) : d;
 
 // Everything arriving from another phone passes through here.
@@ -303,8 +308,11 @@ function validate(g) {
     limit: int(g.limit, 0, MAX_LIMIT, 0), rot: !!g.rot, mode: g.mode === 'all' ? 'all' : 'turn',
     aid: String(g.aid ?? '').slice(0, 12), done: Array.isArray(g.done) ? g.done.filter(x => seen.has(x)).slice(0, 10) : [],
     hold: int(g.hold, 0, 1e9, 0), h, game: typeof g.game === 'string' ? g.game.replace(/\s+/g, ' ').trim().slice(0, 36) : '',
-    host: typeof g.host === 'string' && /^[a-z0-9]{1,16}$/.test(g.host) ? g.host : '' };
+    host: typeof g.host === 'string' && /^[a-z0-9]{1,16}$/.test(g.host) ? g.host : '',
+    art: cleanArt(g.art) };
 }
+// A background picture link the table chose itself: https only, nothing that could break out of a CSS url().
+function cleanArt(u) { u = typeof u === 'string' ? u.trim() : ''; return u.length <= 600 && /^https:\/\/[^\s"'\\()<>]+$/.test(u) ? u : ''; }
 const newer = (a, b) => a.rev > b.rev || (a.rev === b.rev && a.tie > b.tie);
 
 let S = blank(), myId = '', roomCode = '';
@@ -623,6 +631,13 @@ function pickFile(name, pages, loose) {
   const best = hits.find(p => flatOf(p).includes(want)) || hits[0];
   return { url: best.imageinfo[0].thumburl, title: best.title, link: 'https://commons.wikimedia.org/wiki/' + encodeURIComponent(best.title.replace(/ /g, '_')) };
 }
+// 4. Openverse: openly licensed photos from Flickr and other libraries. The photo's own title has to name the game.
+function pickOpen(name, results) {
+  const want = normTitle(name);
+  if (!want || !Array.isArray(results)) return null;
+  const hit = results.find(r => r && typeof r.url === 'string' && cleanArt(r.url) && r.width >= 600 && String(r.title || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '').includes(want));
+  return hit ? { url: hit.url, title: String(hit.title), link: cleanArt(hit.foreign_landing_url) || hit.url } : null;
+}
 async function getPages(url) {
   try { const r = await fetch(url); if (!r.ok) return null; const j = await r.json(); return (j && j.query && j.query.pages) || null; } catch { return null; }
 }
@@ -635,6 +650,9 @@ async function findArt(name) {
   for (const word of ['game', 'spiel']) {
     if (art) break;
     art = pickFile(name, await getPages(COMMONS + 'generator=search&gsrnamespace=6&gsrlimit=20&gsrsearch=' + encodeURIComponent('"' + name.replace(/"/g, '') + '" ' + word + ' filetype:bitmap') + INFO), false);
+  }
+  if (!art) {
+    try { const r = await fetch('https://api.openverse.org/v1/images/?page_size=20&q=' + encodeURIComponent(name + ' board game')); if (r.ok) { const j = await r.json(); art = pickOpen(name, j && j.results); } } catch {}
   }
   artCache.set(name, art);
   return art;
@@ -653,10 +671,11 @@ function showArt(art) {
   img.src = art.url;
 }
 function updateArt() {
-  const name = roomCode ? S.game : '';
+  const own = roomCode ? S.art : '', name = own ? 'link:' + own : roomCode ? S.game : '';
   if (name === artFor) return;
   artFor = name; showArt(null);
-  if (name) findArt(name).then(art => { if (artFor === name && art) showArt({ ...art, name }); });
+  if (own) showArt({ url: own, link: own, name });
+  else if (name) findArt(name).then(art => { if (artFor === name && art) showArt({ ...art, name }); });
 }
 function claimSeat(id) { myId = id; lsSet('turnlight-id', myId); pendingSeat = null; lastKey = null; beat(); render(); }
 // A phone with no seat (site closed and reopened in another browser, cleared
@@ -698,6 +717,7 @@ function renderLobby() {
   }
   $('dragHint').hidden = S.players.length < 2;
   if (document.activeElement !== $('gameInput')) $('gameInput').value = S.game;
+  if (document.activeElement !== $('artInput')) $('artInput').value = S.art;
   $('noSeats').hidden = S.players.length > 0;
   const full = S.players.length >= 10;
   $('formLabel').textContent = me < 0 ? 'Your name' : 'Add a player who has no phone';
@@ -835,6 +855,12 @@ function wire() {
   });
   const setGame = () => { const v = $('gameInput').value.replace(/\s+/g, ' ').trim().slice(0, 36); if (v !== S.game) commit(s => { s.game = v; }); };
   $('gameInput').addEventListener('change', setGame);
+  $('artInput').addEventListener('change', e => {
+    const raw = e.target.value.trim(), v = cleanArt(raw);
+    $('artHint').textContent = raw && !v ? 'That is not a usable link. It has to start with https:// and point at a picture.' : 'Leave empty to look for a picture of the game automatically.';
+    if (v !== S.art && (v || !raw)) commit(s => { s.art = v; });
+  });
+  $('artInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
   $('gameInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
   $('startBtn').addEventListener('click', () => { setGame(); startGame(); });
   makeSortable($('seats')); makeSortable($('playSeats'));
