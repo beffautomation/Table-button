@@ -200,7 +200,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
     <form id="seatForm">
       <label for="nameInput" id="formLabel">Your name</label>
       <div class="row">
-        <input type="text" id="nameInput" maxlength="14" autocomplete="off" placeholder="Name">
+        <input type="text" id="nameInput" maxlength="36" autocomplete="off" placeholder="Name">
         <button class="btn" id="seatBtn" type="submit">Take a seat</button>
       </div>
       <div id="swatches" role="group" aria-label="Player colour"></div>
@@ -208,7 +208,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
     <h2>Table rules</h2>
     <div class="setting" style="flex-direction:column;align-items:stretch;gap:6px">
       <label for="gameInput">Game name (optional)</label>
-      <input type="text" id="gameInput" maxlength="30" autocomplete="off" placeholder="Shown at the top, with matching art">
+      <input type="text" id="gameInput" maxlength="36" autocomplete="off" placeholder="Shown at the top, with matching art">
     </div>
     <div class="setting" style="flex-direction:column;align-items:stretch;gap:8px"><span>Turn timer</span><div class="timerbox" id="timerLobby"></div></div>
     <div class="setting"><label for="rotToggle" style="font-size:16px;color:var(--text)">Pass first player each round</label><input type="checkbox" id="rotToggle"></div>
@@ -290,7 +290,7 @@ function validate(g) {
   for (const p of g.players) {
     if (!p || typeof p.id !== 'string' || !/^[a-z0-9]{1,16}$/.test(p.id) || seen.has(p.id)) return null;
     seen.add(p.id);
-    players.push({ id: p.id, n: String(p.n ?? '').slice(0, 14) || 'Player', c: int(p.c, 0, 9, 0), t: int(p.t, 0, 1e9, 0), k: int(p.k, 0, 1e6, 0), mx: int(p.mx, 0, 1e9, 0) });
+    players.push({ id: p.id, n: String(p.n ?? '').slice(0, 36) || 'Player', c: int(p.c, 0, 9, 0), t: int(p.t, 0, 1e9, 0), k: int(p.k, 0, 1e6, 0), mx: int(p.mx, 0, 1e9, 0) });
   }
   const n = players.length, top = Math.max(0, n - 1);
   if (g.phase !== 'lobby' && n < 1) return null;
@@ -301,7 +301,7 @@ function validate(g) {
     start: int(g.start, 0, 1e14, 0), paused: int(g.paused, 0, 1e14, 0),
     limit: int(g.limit, 0, MAX_LIMIT, 0), rot: !!g.rot, mode: g.mode === 'all' ? 'all' : 'turn',
     aid: String(g.aid ?? '').slice(0, 12), done: Array.isArray(g.done) ? g.done.filter(x => seen.has(x)).slice(0, 10) : [],
-    hold: int(g.hold, 0, 1e9, 0), h, game: typeof g.game === 'string' ? g.game.replace(/\s+/g, ' ').trim().slice(0, 30) : '',
+    hold: int(g.hold, 0, 1e9, 0), h, game: typeof g.game === 'string' ? g.game.replace(/\s+/g, ' ').trim().slice(0, 36) : '',
     host: typeof g.host === 'string' && /^[a-z0-9]{1,16}$/.test(g.host) ? g.host : '' };
 }
 const newer = (a, b) => a.rev > b.rev || (a.rev === b.rev && a.tie > b.tie);
@@ -742,6 +742,7 @@ function renderPlay() {
   document.documentElement.style.setProperty('--pc', COLORS[color][1]);
   $('ring').className = 'ring ' + state + (S.paused ? ' paused' : '');
   $('orbLabel').textContent = label; $('orbHint').textContent = hint;
+  $('orbLabel').style.fontSize = label.length > 28 ? '17px' : label.length > 16 ? '22px' : '';
   $('roundLabel').textContent = 'Round ' + S.round;
   $('modeLabel').textContent = S.limit ? limitName(S.limit) + ' per turn' : 'No turn timer';
   paintTimer($('timerPlay'));
@@ -819,7 +820,7 @@ function wire() {
   for (const id of ['rotToggle', 'rotPlay']) $(id).addEventListener('change', e => commit(s => { s.rot = e.target.checked; }));
   $('seatForm').addEventListener('submit', e => {
     e.preventDefault();
-    const input = $('nameInput'), n = input.value.trim().slice(0, 14);
+    const input = $('nameInput'), n = input.value.trim().slice(0, 36);
     if (!n) { input.focus(); return; }
     if (mySeat() < 0) {
       const live = liveSeats(), old = S.players.find(p => p.n.toLowerCase() === n.toLowerCase() && !live.has(p.id));
@@ -829,7 +830,7 @@ function wire() {
     if (own) pendingSeat = { id, n, c: draftColor, until: Date.now() + 4000 };
     addSeat(id, n, draftColor); input.value = '';
   });
-  const setGame = () => { const v = $('gameInput').value.replace(/\s+/g, ' ').trim().slice(0, 30); if (v !== S.game) commit(s => { s.game = v; }); };
+  const setGame = () => { const v = $('gameInput').value.replace(/\s+/g, ' ').trim().slice(0, 36); if (v !== S.game) commit(s => { s.game = v; }); };
   $('gameInput').addEventListener('change', setGame);
   $('gameInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
   $('startBtn').addEventListener('click', () => { setGame(); startGame(); });
