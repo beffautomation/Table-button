@@ -247,7 +247,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
       <button class="btn" id="pauseBtn" type="button">Pause</button>
     </div>
     <details id="orderBox"><summary>Turn order</summary><ol id="playSeats" class="seatlist"></ol><p class="hint" style="margin:8px 0 10px">Drag the handle. The current turn stays with the same player.</p><button class="btn" id="allBtn" type="button" style="width:100%">Everyone plays at once</button></details>
-    <details><summary>Table code <span id="codeSmall"></span></summary><div class="invite"><span class="link" id="linkSmall"></span></div></details>
+    <details><summary>Table code <span id="codeSmall"></span></summary><div class="invite"><div class="qr" id="qrSmall" hidden></div><span class="link" id="linkSmall"></span></div></details>
     <button class="btn ghost danger" id="endBtn" type="button">End game</button>
   </section>
 
@@ -554,7 +554,7 @@ function renderInvite() {
   $('codeSmall').textContent = roomCode.toUpperCase(); $('linkSmall').textContent = link;
   const box = $('qrBox');
   if (window.qrcode && !box.dataset.for) {
-    try { const q = window.qrcode(0, 'M'); q.addData(link); q.make(); box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 1, scalable: true }); box.dataset.for = roomCode; box.hidden = false; } catch {}
+    try { const q = window.qrcode(0, 'M'); q.addData(link); q.make(); const svg = q.createSvgTag({ cellSize: 4, margin: 1, scalable: true }); for (const b of [box, $('qrSmall')]) { b.innerHTML = svg; b.hidden = false; } box.dataset.for = roomCode; } catch {}
   }
   $('shareBtn').hidden = !navigator.share;
 }
