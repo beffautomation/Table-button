@@ -107,7 +107,12 @@ details > .invite { margin-top: 10px; }
 #codeInput { text-transform: lowercase; letter-spacing: .1em; }
 
 /* Play */
-.status { display: flex; justify-content: space-between; color: var(--mute); font-size: 14px; }
+.status { display: flex; justify-content: space-between; align-items: center; color: var(--mute); font-size: 14px; }
+.status .btn { color: var(--text); }
+.panel { display: flex; flex-direction: column; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.panel[hidden] { display: none; }
+.panel h2 { margin: 0; }
+.panel table { margin-top: 0; }
 .ring { --p: 1; align-self: center; width: min(100%, 330px, 46vh); aspect-ratio: 1; border-radius: 50%; padding: 7px;
   background: conic-gradient(var(--pc) calc(var(--p) * 1turn), var(--line) 0); transition: opacity .3s; }
 .ring.over { background: var(--alert); animation: blink .7s steps(2) infinite; }
@@ -219,7 +224,13 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
   </section>
 
   <section id="play" hidden>
-    <div class="status"><span id="roundLabel"></span><span id="modeLabel"></span></div>
+    <div class="status"><span id="roundLabel"></span><button class="btn small" id="modeBtn" type="button" aria-expanded="false" aria-controls="timerPanel"><span id="modeLabel"></span> <span aria-hidden="true" id="modeCaret">▾</span></button></div>
+    <div class="panel" id="timerPanel" hidden>
+      <h2>Turn timer</h2>
+      <div class="timerbox" id="timerPlay"></div>
+      <h2>Time per player</h2>
+      <table id="liveStats"></table>
+    </div>
     <div class="ring" id="ring">
       <button class="orb" id="orb" type="button">
         <span class="orb-label" id="orbLabel"></span>
@@ -234,10 +245,8 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
       <button class="btn" id="undoBtn" type="button">Undo last turn</button>
       <button class="btn" id="pauseBtn" type="button">Pause</button>
     </div>
-    <details><summary>Turn timer: <span id="timerSmall"></span></summary><div class="timerbox" id="timerPlay"></div></details>
     <details id="orderBox"><summary>Turn order</summary><ol id="playSeats" class="seatlist"></ol><p class="hint" style="margin:8px 0 10px">Drag the handle. The current turn stays with the same player.</p><button class="btn" id="allBtn" type="button" style="width:100%">Everyone plays at once</button></details>
     <details><summary>Table code <span id="codeSmall"></span></summary><div class="invite"><span class="link" id="linkSmall"></span></div></details>
-    <details><summary>Time per player</summary><table id="liveStats"></table></details>
     <button class="btn ghost danger" id="endBtn" type="button">End game</button>
   </section>
 
@@ -700,7 +709,7 @@ function renderPlay() {
   $('orbLabel').textContent = label; $('orbHint').textContent = hint;
   $('roundLabel').textContent = 'Round ' + S.round;
   $('modeLabel').textContent = S.limit ? limitName(S.limit) + ' per turn' : 'No turn timer';
-  $('timerSmall').textContent = limitName(S.limit); paintTimer($('timerPlay'));
+  paintTimer($('timerPlay'));
   const order = $('order'); order.replaceChildren();
   seq.forEach((i, pos) => order.append(h('li', null, h('span', { class: 'dot', style: '--c:' + COLORS[S.players[i].c][1] }), S.players[i].n + (i === me ? ' (you)' : '') + (pos === 0 ? ' · now' : pos === 1 ? ' · next' : ''))));
   const proxy = $('proxyBtn');
@@ -797,6 +806,7 @@ function wire() {
   $('proxyBtn').addEventListener('click', endTurn);
   $('undoBtn').addEventListener('click', undo);
   $('pauseBtn').addEventListener('click', togglePause);
+  $('modeBtn').addEventListener('click', () => { const p = $('timerPanel'), open = p.hidden; p.hidden = !open; $('modeBtn').setAttribute('aria-expanded', String(open)); $('modeCaret').textContent = open ? '▴' : '▾'; });
   $('allBtn').addEventListener('click', toggleAll);
   $('allBackBtn').addEventListener('click', () => { if (S.mode === 'all') toggleAll(); });
   let armed = 0;
