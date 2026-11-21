@@ -37,6 +37,7 @@ body {
 }
 .art { position: fixed; inset: 0; z-index: 0; background: center / cover no-repeat; opacity: 0; transition: opacity .8s; pointer-events: none; }
 .art.show { opacity: 1; }
+.art.soft { filter: blur(10px); transform: scale(1.12); }
 .art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(rgba(19,17,27,.62), rgba(19,17,27,.86) 55%, rgba(19,17,27,.94)); }
 .credit { font-size: 12px; color: var(--mute); text-align: center; margin-top: auto; }
 .credit a { color: inherit; }
@@ -593,6 +594,7 @@ const COMMONS = 'https://commons.wikimedia.org/w/api.php?action=query&format=jso
 const INFO = '&prop=imageinfo&iiprop=url%7Csize%7Cmime&iiurlwidth=1000';
 const tail = t => (String(t).match(/\(([^)]*)\)\s*$/) || [])[1] || '';
 // 1. The Wikipedia article: exact title match, and it must be described as a game.
+//    Its main picture is used whatever it is, which for most games is the box cover.
 function pickArticle(name, pages) {
   const want = normTitle(name);
   if (!want || !Array.isArray(pages)) return null;
@@ -627,7 +629,7 @@ async function getPages(url) {
 async function findArt(name) {
   if (artCache.has(name)) return artCache.get(name);
   let art = null;
-  const article = pickArticle(name, await getPages(WIKI + 'generator=search&gsrlimit=8&gsrsearch=' + encodeURIComponent(name + ' game') + '&prop=pageimages%7Cdescription&piprop=thumbnail&pithumbsize=1000&pilicense=free'));
+  const article = pickArticle(name, await getPages(WIKI + 'generator=search&gsrlimit=8&gsrsearch=' + encodeURIComponent(name + ' game') + '&prop=pageimages%7Cdescription&piprop=thumbnail&pithumbsize=1000&pilicense=any'));
   if (article && article.url) art = { url: article.url, title: article.title, link: 'https://en.wikipedia.org/wiki/' + encodeURIComponent(article.title.replace(/ /g, '_')) };
   if (!art && article) art = pickFile(name, await getPages(WIKI + 'generator=images&gimlimit=50&titles=' + encodeURIComponent(article.title) + INFO), true);
   for (const word of ['game', 'spiel']) {
@@ -644,6 +646,7 @@ function showArt(art) {
   img.onload = () => {
     if (artFor !== art.name) return;
     el.style.backgroundImage = 'url("' + art.url.replace(/["\\\n]/g, '') + '")'; el.classList.add('show');
+    el.classList.toggle('soft', img.naturalWidth < 700);   // small pictures get a soft blur so they do not look pixelated
     $('artLink').href = art.link;
     $('artCredit').hidden = false;
   };
