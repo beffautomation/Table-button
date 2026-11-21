@@ -76,6 +76,7 @@ details > .seatlist { margin-top: 10px; }
 .hint { font-size: 13px; color: var(--mute); }
 .timerbox { display: flex; flex-direction: column; gap: 10px; }
 .timerbox .seg { align-self: flex-start; }
+.timerbox .custom[hidden] { display: none; }
 .timerbox .custom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--mute); font-size: 14px; }
 input.num[type=text] { flex: none; width: 58px; text-align: center; padding: 9px 4px; font-variant-numeric: tabular-nums; }
 details > .timerbox { margin-top: 10px; }
@@ -94,7 +95,7 @@ input[type=text] { flex: 1; min-width: 0; font: inherit; color: var(--text); bac
 #swatches button:disabled { opacity: .18; cursor: default; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.seg button { background: none; border: 0; padding: 8px 11px; color: var(--mute); font-size: 14px; }
+.seg button { background: none; border: 0; padding: 8px 10px; white-space: nowrap; color: var(--mute); font-size: 14px; }
 .seg button[aria-pressed=true] { background: var(--text); color: var(--ink); font-weight: 700; }
 input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--text); }
 
@@ -559,17 +560,23 @@ function renderInvite() {
 }
 function buildTimer(box, key) {
   const seg = h('div', { class: 'seg' });
-  LIMITS.forEach((v, i) => seg.append(h('button', { type: 'button', text: LIMIT_NAMES[i], 'aria-pressed': 'false', onclick: () => setLimit(v) })));
+  LIMITS.forEach((v, i) => seg.append(h('button', { type: 'button', text: LIMIT_NAMES[i], 'aria-pressed': 'false', onclick: () => { form.hidden = true; setLimit(v); paintTimer(box); } })));
   const min = h('input', { type: 'text', class: 'num', id: key + 'Min', inputmode: 'numeric', maxlength: '2', autocomplete: 'off', 'aria-label': 'Custom timer minutes', placeholder: '0' });
   const sec = h('input', { type: 'text', class: 'num', id: key + 'Sec', inputmode: 'numeric', maxlength: '3', autocomplete: 'off', 'aria-label': 'Custom timer seconds', placeholder: '0' });
-  const apply = () => { const v = (parseInt(min.value, 10) || 0) * 60 + (parseInt(sec.value, 10) || 0); min.blur(); sec.blur(); setLimit(v); paintTimer(box); };
-  const form = h('form', { class: 'custom' }, h('span', { text: 'Custom' }), min, h('span', { text: 'min' }), sec, h('span', { text: 'sec' }), h('button', { class: 'btn small', type: 'submit', text: 'Set timer' }));
+  const apply = () => { const v = (parseInt(min.value, 10) || 0) * 60 + (parseInt(sec.value, 10) || 0); min.blur(); sec.blur(); form.hidden = true; setLimit(v); paintTimer(box); };
+  seg.append(h('button', { type: 'button', text: 'Custom', 'aria-pressed': 'false', 'aria-expanded': 'false', onclick: () => { form.hidden = !form.hidden; paintTimer(box); if (!form.hidden) min.focus(); } }));
+  const form = h('form', { class: 'custom', hidden: true }, min, h('span', { text: 'min' }), sec, h('span', { text: 'sec' }), h('button', { class: 'btn small', type: 'submit', text: 'Set timer' }));
   form.addEventListener('submit', e => { e.preventDefault(); apply(); });
   box.append(seg, form);
 }
 function paintTimer(box) {
   const [seg, form] = box.children;
-  [...seg.children].forEach((b, i) => b.setAttribute('aria-pressed', String(LIMITS[i] === S.limit)));
+  const custom = !LIMITS.includes(S.limit);
+  [...seg.children].forEach((b, i) => {
+    if (i < LIMITS.length) { b.setAttribute('aria-pressed', String(LIMITS[i] === S.limit)); return; }
+    b.textContent = custom ? limitName(S.limit) : 'Custom';
+    b.setAttribute('aria-pressed', String(custom)); b.setAttribute('aria-expanded', String(!form.hidden));
+  });
   if (form.contains(document.activeElement)) return;
   const [min, sec] = form.querySelectorAll('input');
   min.value = S.limit ? String(Math.floor(S.limit / 60)) : ''; sec.value = S.limit ? String(S.limit % 60) : '';
