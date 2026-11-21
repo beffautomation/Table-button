@@ -35,7 +35,12 @@ body {
   font: 400 16px/1.45 var(--body);
   -webkit-tap-highlight-color: transparent;
 }
-.app { max-width: 460px; min-height: 100%; margin: 0 auto; padding: 14px 18px 28px; display: flex; flex-direction: column; gap: 18px; }
+.art { position: fixed; inset: 0; z-index: 0; background: center / cover no-repeat; opacity: 0; transition: opacity .8s; pointer-events: none; }
+.art.show { opacity: 1; }
+.art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(rgba(19,17,27,.62), rgba(19,17,27,.86) 55%, rgba(19,17,27,.94)); }
+.credit { font-size: 12px; color: var(--mute); text-align: center; margin-top: auto; }
+.credit a { color: inherit; }
+.app { position: relative; z-index: 1; max-width: 460px; min-height: 100%; margin: 0 auto; padding: 14px 18px 28px; display: flex; flex-direction: column; gap: 18px; }
 header { display: flex; align-items: center; gap: 10px; }
 .mark { font: 800 20px/1.15 var(--display); letter-spacing: -0.02em; margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mark i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--pc); margin-right: 7px; box-shadow: 0 0 12px var(--pc); }
@@ -139,6 +144,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
 </style>
 </head>
 <body>
+<div class="art" id="art" aria-hidden="true"></div>
 <div class="app">
   <header>
     <span class="mark"><i></i><span id="markText">Turnlight</span></span>
@@ -196,7 +202,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
     <h2>Table rules</h2>
     <div class="setting" style="flex-direction:column;align-items:stretch;gap:6px">
       <label for="gameInput">Game name (optional)</label>
-      <input type="text" id="gameInput" maxlength="30" autocomplete="off" placeholder="Shown at the top of every phone">
+      <input type="text" id="gameInput" maxlength="30" autocomplete="off" placeholder="Shown at the top, with matching art">
     </div>
     <div class="setting" style="flex-direction:column;align-items:stretch;gap:8px"><span>Turn timer</span><div class="timerbox" id="timerLobby"></div></div>
     <div class="setting"><label for="rotToggle" style="font-size:16px;color:var(--text)">Pass first player each round</label><input type="checkbox" id="rotToggle"></div>
@@ -223,13 +229,13 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
     </div>
     <ol class="order" id="order" aria-label="Upcoming turns"></ol>
     <button class="btn" id="proxyBtn" type="button"></button>
+    <button class="btn" id="allBackBtn" type="button" hidden>Back to turn order</button>
     <div class="controls">
       <button class="btn" id="undoBtn" type="button">Undo last turn</button>
       <button class="btn" id="pauseBtn" type="button">Pause</button>
-      <button class="btn" id="allBtn" type="button" style="grid-column:1/-1">Everyone plays at once</button>
     </div>
     <details><summary>Turn timer: <span id="timerSmall"></span></summary><div class="timerbox" id="timerPlay"></div></details>
-    <details id="orderBox"><summary>Change turn order</summary><ol id="playSeats" class="seatlist"></ol><p class="hint" style="margin-top:8px">Drag the handle. The current turn stays with the same player.</p></details>
+    <details id="orderBox"><summary>Turn order</summary><ol id="playSeats" class="seatlist"></ol><p class="hint" style="margin:8px 0 10px">Drag the handle. The current turn stays with the same player.</p><button class="btn" id="allBtn" type="button" style="width:100%">Everyone plays at once</button></details>
     <details><summary>Table code <span id="codeSmall"></span></summary><div class="invite"><span class="link" id="linkSmall"></span></div></details>
     <details><summary>Time per player</summary><table id="liveStats"></table></details>
     <button class="btn ghost danger" id="endBtn" type="button">End game</button>
@@ -244,6 +250,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
     <p class="hint" id="againHint"></p>
     <button class="btn" id="lobbyBtn" type="button">Change players or rules</button>
   </section>
+  <p class="credit" id="artCredit" hidden>Background photo: <a id="artLink" target="_blank" rel="noopener"></a> on Wikipedia</p>
 </div>
 
 <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
@@ -558,6 +565,52 @@ function paintTimer(box) {
   const [min, sec] = form.querySelectorAll('input');
   min.value = S.limit ? String(Math.floor(S.limit / 60)) : ''; sec.value = S.limit ? String(S.limit % 60) : '';
 }
+/* ---------- background art ----------
+   Looks the game name up on Wikipedia and uses the article's freely licensed
+   photo. Only an exact title match on an article described as a game counts;
+   anything less sure leaves the plain background. */
+const artCache = new Map();
+let artFor = null;
+const normTitle = s => String(s).toLowerCase().replace(/\s*\([^)]*\)\s*$/, '').replace(/&/g, 'and').replace(/^the\s+/, '').replace(/[^a-z0-9]+/g, '');
+function pickArt(name, pages) {
+  const want = normTitle(name);
+  if (!want || !Array.isArray(pages)) return null;
+  const hits = pages.filter(p => p && typeof p.title === 'string' && normTitle(p.title) === want
+      && /\bgames?\b/i.test((p.description || '') + ' ' + ((p.title.match(/\(([^)]*)\)\s*$/) || [])[1] || ''))
+      && p.thumbnail && typeof p.thumbnail.source === 'string' && /^https:\/\/upload\.wikimedia\.org\//.test(p.thumbnail.source))
+    .sort((a, b) => (a.index || 0) - (b.index || 0));
+  return hits.length ? { url: hits[0].thumbnail.source, title: hits[0].title } : null;
+}
+async function findArt(name) {
+  if (artCache.has(name)) return artCache.get(name);
+  let art = null;
+  try {
+    const q = 'https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&origin=*&redirects=1&generator=search&gsrlimit=8&gsrsearch='
+      + encodeURIComponent(name + ' game') + '&prop=pageimages%7Cdescription&piprop=thumbnail&pithumbsize=1000&pilicense=free';
+    const r = await fetch(q);
+    if (r.ok) { const j = await r.json(); art = pickArt(name, j && j.query && j.query.pages); }
+  } catch {}
+  artCache.set(name, art);
+  return art;
+}
+function showArt(art) {
+  const el = $('art');
+  if (!art) { el.classList.remove('show'); $('artCredit').hidden = true; return; }
+  const img = new Image();
+  img.onload = () => {
+    if (artFor !== art.name) return;
+    el.style.backgroundImage = 'url("' + art.url.replace(/["\\\n]/g, '') + '")'; el.classList.add('show');
+    $('artLink').textContent = art.title; $('artLink').href = 'https://en.wikipedia.org/wiki/' + encodeURIComponent(art.title.replace(/ /g, '_'));
+    $('artCredit').hidden = false;
+  };
+  img.src = art.url;
+}
+function updateArt() {
+  const name = roomCode ? S.game : '';
+  if (name === artFor) return;
+  artFor = name; showArt(null);
+  if (name) findArt(name).then(art => { if (artFor === name && art) showArt({ ...art, name }); });
+}
 function claimSeat(id) { myId = id; lsSet('turnlight-id', myId); pendingSeat = null; lastKey = null; beat(); render(); }
 // A phone with no seat (site closed and reopened in another browser, cleared
 // storage, new phone) can take back any seat that no connected phone is using.
@@ -656,6 +709,7 @@ function renderPlay() {
   $('undoBtn').disabled = !S.h || S.mode !== 'turn';
   $('pauseBtn').textContent = S.paused ? 'Resume' : 'Pause';
   $('allBtn').textContent = S.mode === 'all' ? 'Back to turn order' : 'Everyone plays at once';
+  $('allBackBtn').hidden = S.mode !== 'all';
   if (!sorting) {
     const pl = $('playSeats'); pl.replaceChildren();
     S.players.forEach((p, i) => {
@@ -672,7 +726,7 @@ function render() {
   if ($('markText').textContent !== title) { $('markText').textContent = title; document.title = title === 'Turnlight' ? title : title + ' · Turnlight'; }
   $('home').hidden = !!roomCode;
   $('lobby').hidden = !roomCode || S.phase !== 'lobby'; $('play').hidden = !roomCode || S.phase !== 'play'; $('done').hidden = !roomCode || S.phase !== 'done';
-  renderClaim();
+  renderClaim(); updateArt();
   if (!roomCode) { setColor(); return; }
   renderInvite();
   if (S.phase === 'lobby') { renderLobby(); setColor(); }
@@ -744,6 +798,7 @@ function wire() {
   $('undoBtn').addEventListener('click', undo);
   $('pauseBtn').addEventListener('click', togglePause);
   $('allBtn').addEventListener('click', toggleAll);
+  $('allBackBtn').addEventListener('click', () => { if (S.mode === 'all') toggleAll(); });
   let armed = 0;
   $('endBtn').addEventListener('click', e => {
     if (Date.now() < armed) { armed = 0; e.target.textContent = 'End game'; endGame(); return; }
