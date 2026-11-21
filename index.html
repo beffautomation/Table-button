@@ -37,7 +37,7 @@ body {
 }
 .app { max-width: 460px; min-height: 100%; margin: 0 auto; padding: 14px 18px 28px; display: flex; flex-direction: column; gap: 18px; }
 header { display: flex; align-items: center; gap: 10px; }
-.mark { font: 800 20px/1 var(--display); letter-spacing: -0.02em; margin-right: auto; }
+.mark { font: 800 20px/1.15 var(--display); letter-spacing: -0.02em; margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mark i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--pc); margin-right: 7px; box-shadow: 0 0 12px var(--pc); }
 .chip { font-size: 13px; color: var(--mute); border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px; white-space: nowrap; }
 .chip.live { color: var(--text); }
@@ -62,8 +62,14 @@ section[hidden] { display: none; }
 .mini-orb { flex: none; width: 74px; height: 74px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--pc) 70%, white), var(--pc) 50%, color-mix(in srgb, var(--pc) 55%, black));
   box-shadow: 0 0 34px color-mix(in srgb, var(--pc) 70%, transparent); animation: breathe 3s ease-in-out infinite; }
-#seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-#seats li { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 8px 12px; }
+.seatlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.seatlist li.dragging { border-color: var(--text); background: color-mix(in srgb, var(--panel) 80%, var(--text)); box-shadow: 0 6px 22px #0008; position: relative; z-index: 1; }
+.grip { flex: none; width: 40px; height: 40px; border: 0; background: none; color: var(--mute); border-radius: 10px; touch-action: none; cursor: grab; display: grid; place-items: center; padding: 0; }
+.grip svg { width: 20px; height: 20px; fill: currentColor; }
+.seatlist.sorting, .seatlist.sorting * { user-select: none; -webkit-user-select: none; }
+details > .seatlist { margin-top: 10px; }
+.hint { font-size: 13px; color: var(--mute); }
+.seatlist li { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px 8px 6px 4px; }
 .dot { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--c); }
 .who { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
 .who small { display: block; font-weight: 400; font-size: 13px; color: var(--mute); }
@@ -130,7 +136,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
 <body>
 <div class="app">
   <header>
-    <span class="mark"><i></i>Turnlight</span>
+    <span class="mark"><i></i><span id="markText">Turnlight</span></span>
     <span class="chip" id="syncChip" hidden>Connecting</span>
     <button class="btn small" id="soundBtn" type="button" aria-pressed="true">Sound on</button>
   </header>
@@ -171,7 +177,8 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
       <div class="row"><button class="btn" id="copyBtn" type="button" style="flex:1">Copy link</button><button class="btn" id="shareBtn" type="button" style="flex:1" hidden>Share</button></div>
     </div>
     <h2>Turn order</h2>
-    <ol id="seats"></ol>
+    <ol id="seats" class="seatlist"></ol>
+    <p class="hint" id="dragHint">Drag the handle to change the turn order.</p>
     <p class="empty" id="noSeats">No one is seated yet. Add your name below, then have each player scan the code or open the link on their own phone.</p>
     <form id="seatForm">
       <label for="nameInput" id="formLabel">Your name</label>
@@ -182,6 +189,10 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
       <div id="swatches" role="group" aria-label="Player colour"></div>
     </form>
     <h2>Table rules</h2>
+    <div class="setting" style="flex-direction:column;align-items:stretch;gap:6px">
+      <label for="gameInput">Game name (optional)</label>
+      <input type="text" id="gameInput" maxlength="30" autocomplete="off" placeholder="Shown at the top of every phone">
+    </div>
     <div class="setting"><span>Turn timer</span><div class="seg" id="limitSeg"></div></div>
     <div class="setting"><label for="rotToggle" style="font-size:16px;color:var(--text)">Pass first player each round</label><input type="checkbox" id="rotToggle"></div>
     <button class="btn primary" id="startBtn" type="button">Start game</button>
@@ -205,6 +216,7 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
       <button class="btn" id="pauseBtn" type="button">Pause</button>
       <button class="btn" id="allBtn" type="button" style="grid-column:1/-1">Everyone plays at once</button>
     </div>
+    <details id="orderBox"><summary>Change turn order</summary><ol id="playSeats" class="seatlist"></ol><p class="hint" style="margin-top:8px">Drag the handle. The current turn stays with the same player.</p></details>
     <details><summary>Table code <span id="codeSmall"></span></summary><div class="invite"><span class="link" id="linkSmall"></span></div></details>
     <details><summary>Time per player</summary><table id="liveStats"></table></details>
     <button class="btn ghost danger" id="endBtn" type="button">End game</button>
@@ -231,7 +243,7 @@ const LIMIT_NAMES = ['Off', '30s', '1m', '2m', '5m'];
 const rand = () => Math.random().toString(36).slice(2, 10) || 'x';
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-const blank = () => ({ v: 1, rev: 0, tie: '', phase: 'lobby', players: [], cur: 0, first: 0, round: 1, start: 0, paused: 0, limit: 0, rot: false, mode: 'turn', aid: '', done: [], hold: 0, h: null });
+const blank = () => ({ v: 1, rev: 0, tie: '', phase: 'lobby', players: [], cur: 0, first: 0, round: 1, start: 0, paused: 0, limit: 0, rot: false, mode: 'turn', aid: '', done: [], hold: 0, h: null, game: '' });
 const int = (x, lo, hi, d) => Number.isFinite(x) ? Math.min(hi, Math.max(lo, Math.floor(x))) : d;
 
 // Everything arriving from another phone passes through here.
@@ -255,7 +267,7 @@ function validate(g) {
     start: int(g.start, 0, 1e14, 0), paused: int(g.paused, 0, 1e14, 0),
     limit: LIMITS.includes(g.limit) ? g.limit : 0, rot: !!g.rot, mode: g.mode === 'all' ? 'all' : 'turn',
     aid: String(g.aid ?? '').slice(0, 12), done: Array.isArray(g.done) ? g.done.filter(x => seen.has(x)).slice(0, 10) : [],
-    hold: int(g.hold, 0, 1e9, 0), h };
+    hold: int(g.hold, 0, 1e9, 0), h, game: typeof g.game === 'string' ? g.game.replace(/\s+/g, ' ').trim().slice(0, 30) : '' };
 }
 const newer = (a, b) => a.rev > b.rev || (a.rev === b.rev && a.tie > b.tie);
 
@@ -356,6 +368,64 @@ function upcoming() {
   for (let i = 1; i < n; i++) { [c, f] = step(c, f, n, S.rot); out.push(c); }
   return out;
 }
+// Reorder by player id, at any point in the game. Whoever is up stays up, the
+// round's first player stays first, and the one-step undo keeps pointing at the same person.
+function reorder(ids) {
+  commit(s => {
+    if (ids.length !== s.players.length || !s.players.every(p => ids.includes(p.id))) return;
+    const curId = s.players[s.cur] && s.players[s.cur].id, firstId = s.players[s.first] && s.players[s.first].id, undoId = s.h && s.players[s.h[0]] && s.players[s.h[0]].id, undoFirstId = s.h && s.players[s.h[1]] && s.players[s.h[1]].id;
+    s.players = ids.map(id => s.players.find(p => p.id === id));
+    const at = id => Math.max(0, s.players.findIndex(p => p.id === id));
+    if (s.phase !== 'lobby') { s.cur = at(curId); s.first = at(firstId); if (s.h) { s.h[0] = at(undoId); s.h[1] = at(undoFirstId); } }
+  });
+}
+let sorting = false;
+function makeSortable(list) {
+  let item = null, pid = null;
+  const ids = () => [...list.children].map(li => li.dataset.id);
+  const finish = save => {
+    if (!item) return;
+    item.classList.remove('dragging'); list.classList.remove('sorting');
+    try { list.releasePointerCapture(pid); } catch {}
+    item = null; pid = null; sorting = false;
+    if (save) reorder(ids());
+    render();
+  };
+  list.addEventListener('pointerdown', e => {
+    const grip = e.target.closest && e.target.closest('.grip');
+    if (!grip || item) return;
+    e.preventDefault();
+    item = grip.closest('li'); pid = e.pointerId; sorting = true;
+    item.classList.add('dragging'); list.classList.add('sorting');
+    try { list.setPointerCapture(pid); } catch {}
+  });
+  list.addEventListener('pointermove', e => {
+    if (!item || e.pointerId !== pid) return;
+    e.preventDefault();
+    for (const li of list.children) {
+      if (li === item) continue;
+      const r = li.getBoundingClientRect(), mid = r.top + r.height / 2;
+      const before = !!(item.compareDocumentPosition(li) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (before && e.clientY > mid) { li.after(item); break; }       // dragged past the row below
+      if (!before && e.clientY < mid) { li.before(item); break; }     // dragged past the row above
+    }
+  });
+  list.addEventListener('pointerup', e => { if (e.pointerId === pid) finish(true); });
+  list.addEventListener('pointercancel', e => { if (e.pointerId === pid) finish(false); });
+  list.addEventListener('keydown', e => {
+    const grip = e.target.closest && e.target.closest('.grip');
+    if (!grip || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    const order = ids(), id = grip.closest('li').dataset.id, i = order.indexOf(id), j = i + (e.key === 'ArrowUp' ? -1 : 1);
+    if (j < 0 || j >= order.length) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    reorder(order);
+    const again = [...list.children].find(li => li.dataset.id === id);
+    if (again) again.querySelector('.grip').focus();
+  });
+}
+const GRIP = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="7" cy="5" r="1.6"/><circle cx="13" cy="5" r="1.6"/><circle cx="7" cy="10" r="1.6"/><circle cx="13" cy="10" r="1.6"/><circle cx="7" cy="15" r="1.6"/><circle cx="13" cy="15" r="1.6"/></svg>';
+function gripFor(p) { const b = h('button', { class: 'grip', type: 'button', 'aria-label': 'Reorder ' + p.n + '. Drag, or use the up and down arrow keys' }); b.innerHTML = GRIP; return b; }
 function addSeat(id, n, c) {
   commit(s => { if (s.phase === 'lobby' && s.players.length < 10 && !s.players.some(p => p.id === id)) s.players.push({ id, n, c, t: 0, k: 0, mx: 0 }); });
 }
@@ -453,19 +523,22 @@ function renderSwatches() {
 }
 function renderLobby() {
   const live = liveSeats(), me = mySeat(), list = $('seats');
-  list.replaceChildren();
-  S.players.forEach((p, i) => {
-    const mine = p.id === myId;
-    const note = mine ? 'This phone' : live.has(p.id) ? 'Phone connected' : 'No phone yet';
-    const who = h('span', { class: 'who', text: (i + 1) + '. ' + p.n }, h('small', { text: note }));
-    const move = d => () => commit(s => { const j = i + d; if (j < 0 || j >= s.players.length) return; [s.players[i], s.players[j]] = [s.players[j], s.players[i]]; });
-    list.append(h('li', null,
-      h('span', { class: 'dot', style: '--c:' + COLORS[p.c][1] }), who,
-      me < 0 && !live.has(p.id) ? h('button', { class: 'btn small', type: 'button', text: "That's me", onclick: () => { myId = p.id; lsSet('turnlight-id', myId); beat(); render(); } }) : null,
-      h('button', { class: 'btn small', type: 'button', 'aria-label': 'Move ' + p.n + ' earlier', text: '↑', disabled: i === 0, onclick: move(-1) }),
-      h('button', { class: 'btn small', type: 'button', 'aria-label': 'Move ' + p.n + ' later', text: '↓', disabled: i === S.players.length - 1, onclick: move(1) }),
-      h('button', { class: 'btn small', type: 'button', 'aria-label': 'Remove ' + p.n, text: '✕', onclick: () => { if (mine) pendingSeat = null; commit(s => { s.players = s.players.filter(x => x.id !== p.id); }); } })));
-  });
+  if (!sorting) {
+    list.replaceChildren();
+    S.players.forEach((p, i) => {
+      const mine = p.id === myId;
+      const note = mine ? 'This phone' : live.has(p.id) ? 'Phone connected' : 'No phone yet';
+      const who = h('span', { class: 'who', text: (i + 1) + '. ' + p.n }, h('small', { text: note }));
+      const li = h('li', null, gripFor(p),
+        h('span', { class: 'dot', style: '--c:' + COLORS[p.c][1] }), who,
+        me < 0 && !live.has(p.id) ? h('button', { class: 'btn small', type: 'button', text: "That's me", onclick: () => { myId = p.id; lsSet('turnlight-id', myId); beat(); render(); } }) : null,
+        h('button', { class: 'btn small', type: 'button', 'aria-label': 'Remove ' + p.n, text: '✕', onclick: () => { if (mine) pendingSeat = null; commit(s => { s.players = s.players.filter(x => x.id !== p.id); }); } }));
+      li.dataset.id = p.id;
+      list.append(li);
+    });
+  }
+  $('dragHint').hidden = S.players.length < 2;
+  if (document.activeElement !== $('gameInput')) $('gameInput').value = S.game;
   $('noSeats').hidden = S.players.length > 0;
   const full = S.players.length >= 10;
   $('formLabel').textContent = me < 0 ? 'Your name' : 'Add a player who has no phone';
@@ -521,10 +594,20 @@ function renderPlay() {
   $('undoBtn').disabled = !S.h || S.mode !== 'turn';
   $('pauseBtn').textContent = S.paused ? 'Resume' : 'Pause';
   $('allBtn').textContent = S.mode === 'all' ? 'Back to turn order' : 'Everyone plays at once';
+  if (!sorting) {
+    const pl = $('playSeats'); pl.replaceChildren();
+    S.players.forEach((p, i) => {
+      const li = h('li', null, gripFor(p), h('span', { class: 'dot', style: '--c:' + COLORS[p.c][1] }),
+        h('span', { class: 'who', text: (i + 1) + '. ' + p.n }, h('small', { text: i === S.cur ? 'Playing now' : i === me ? 'You' : '' })));
+      li.dataset.id = p.id; pl.append(li);
+    });
+  }
   statsTable($('liveStats'));
   paint();
 }
 function render() {
+  const title = (roomCode && S.game) || 'Turnlight';
+  if ($('markText').textContent !== title) { $('markText').textContent = title; document.title = title === 'Turnlight' ? title : title + ' · Turnlight'; }
   $('home').hidden = !!roomCode;
   $('lobby').hidden = !roomCode || S.phase !== 'lobby'; $('play').hidden = !roomCode || S.phase !== 'play'; $('done').hidden = !roomCode || S.phase !== 'done';
   if (!roomCode) { setColor(); return; }
@@ -578,7 +661,11 @@ function wire() {
     if (own) pendingSeat = { id, n, c: draftColor, until: Date.now() + 4000 };
     addSeat(id, n, draftColor); input.value = '';
   });
-  $('startBtn').addEventListener('click', startGame);
+  const setGame = () => { const v = $('gameInput').value.replace(/\s+/g, ' ').trim().slice(0, 30); if (v !== S.game) commit(s => { s.game = v; }); };
+  $('gameInput').addEventListener('change', setGame);
+  $('gameInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
+  $('startBtn').addEventListener('click', () => { setGame(); startGame(); });
+  makeSortable($('seats')); makeSortable($('playSeats'));
   $('orb').addEventListener('click', () => {
     if (S.paused) return togglePause();
     if (S.mode === 'all') { if (mySeat() >= 0) markDone(); return; }
