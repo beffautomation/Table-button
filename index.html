@@ -14,8 +14,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap" rel="stylesheet">
 <style>
-/* Layout idea: one column, thumb-reach controls at the bottom, and a single
-   glowing orb that carries all the colour. Everything else stays quiet. */
+/* Layout idea: during play the screen is one glowing light with the numbers
+   inside it. Settings live in a menu, table chatter one swipe to the side. */
 :root {
   color-scheme: dark;
   --ink: #13111b;        /* table at night, biased toward violet */
@@ -24,139 +24,178 @@
   --text: #f2ede2;
   --mute: #a19bb3;
   --alert: #ff5a4f;      /* over time, destructive */
+  --slow: #f5c93b;       /* slower than your own average */
   --pc: #5b8cff;         /* the player colour, set from script */
   --display: "Bricolage Grotesque", "Arial Narrow", system-ui, sans-serif;
   --body: "Atkinson Hyperlegible", Verdana, system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
-body {
-  background: var(--ink); color: var(--text);
-  font: 400 16px/1.45 var(--body);
-  -webkit-tap-highlight-color: transparent;
-}
+body { background: var(--ink); color: var(--text); font: 400 16px/1.45 var(--body); -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
 .art { position: fixed; inset: 0; z-index: 0; background: center / cover no-repeat; opacity: 0; transition: opacity .8s; pointer-events: none; }
 .art.show { opacity: 1; }
 .art.soft { filter: blur(10px); transform: scale(1.12); }
 .art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(rgba(19,17,27,.62), rgba(19,17,27,.86) 55%, rgba(19,17,27,.94)); }
 .credit { font-size: 12px; color: var(--mute); text-align: center; margin-top: auto; }
 .credit a { color: inherit; }
-.app { position: relative; z-index: 1; max-width: 460px; min-height: 100%; margin: 0 auto; padding: 14px 18px 28px; display: flex; flex-direction: column; gap: 18px; }
+.app { position: relative; z-index: 1; max-width: 460px; min-height: 100%; margin: 0 auto; padding: 12px 18px 22px; display: flex; flex-direction: column; gap: 16px; }
 header { display: flex; align-items: center; gap: 10px; }
 .mark { font: 800 20px/1.15 var(--display); letter-spacing: -0.02em; margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mark i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--pc); margin-right: 7px; box-shadow: 0 0 12px var(--pc); }
+.clock { font-size: 14px; color: var(--mute); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .chip { font-size: 13px; color: var(--mute); border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px; white-space: nowrap; }
 .chip.live { color: var(--text); }
 .chip.live::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #3ddc84; margin-right: 6px; }
 button { font: inherit; color: inherit; cursor: pointer; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .btn { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 46px; }
 .btn:disabled { opacity: .4; cursor: default; }
 .btn.small { padding: 5px 10px; min-height: 36px; border-radius: 10px; font-size: 14px; }
 .btn.primary { background: var(--text); color: var(--ink); border-color: var(--text); font-weight: 700; font-size: 18px; min-height: 56px; }
 .btn.ghost { background: none; color: var(--mute); }
 .btn.danger { color: var(--alert); }
+.btn.pulse { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--text) 22%, transparent); } }
 h1 { font: 800 30px/1.05 var(--display); letter-spacing: -0.03em; margin: 0 0 6px; text-wrap: balance; }
 h2 { font: 600 13px/1 var(--body); letter-spacing: .09em; text-transform: uppercase; color: var(--mute); margin: 8px 0 0; }
 p { margin: 0; }
 .lede { color: var(--mute); }
+.hint { font-size: 13px; color: var(--mute); }
 section { display: flex; flex-direction: column; gap: 14px; }
-section[hidden] { display: none; }
 
 /* Lobby */
 .hero { display: flex; gap: 16px; align-items: center; }
 .mini-orb { flex: none; width: 74px; height: 74px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--pc) 70%, white), var(--pc) 50%, color-mix(in srgb, var(--pc) 55%, black));
   box-shadow: 0 0 34px color-mix(in srgb, var(--pc) 70%, transparent); animation: breathe 3s ease-in-out infinite; }
-.seatlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.seatlist li.dragging { border-color: var(--text); background: color-mix(in srgb, var(--panel) 80%, var(--text)); box-shadow: 0 6px 22px #0008; position: relative; z-index: 1; }
-.grip { flex: none; width: 40px; height: 40px; border: 0; background: none; color: var(--mute); border-radius: 10px; touch-action: none; cursor: grab; display: grid; place-items: center; padding: 0; }
-.grip svg { width: 20px; height: 20px; fill: currentColor; }
-.seatlist.sorting, .seatlist.sorting * { user-select: none; -webkit-user-select: none; }
-details > .seatlist { margin-top: 10px; }
-.hint { font-size: 13px; color: var(--mute); }
-.timerbox { display: flex; flex-direction: column; gap: 10px; }
-.timerbox .seg { align-self: flex-start; }
-.timerbox .custom[hidden] { display: none; }
-.timerbox .custom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--mute); font-size: 14px; }
-input.num[type=text] { flex: none; width: 58px; text-align: center; padding: 9px 4px; font-variant-numeric: tabular-nums; }
-details > .timerbox { margin-top: 10px; }
-.seatlist li { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px 8px 6px 4px; }
-.dot { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--c); }
-.who { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
-.who small { display: block; font-weight: 400; font-size: 13px; color: var(--mute); }
-.empty { color: var(--mute); border: 1px dashed var(--line); border-radius: 12px; padding: 14px; }
 form { display: flex; flex-direction: column; gap: 10px; }
 label { font-size: 14px; color: var(--mute); }
 .row { display: flex; gap: 8px; }
 input[type=text] { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.joinbtn { align-self: center; width: min(100%, 320px); min-height: 60px; font: 800 20px/1 var(--display); border-radius: 16px; border: 2px solid var(--line); background: var(--panel); color: var(--mute); transition: background .25s, color .25s, box-shadow .25s, transform .25s; }
+.joinbtn.ready { background: var(--pc); border-color: var(--pc); color: #14121c; box-shadow: 0 0 28px color-mix(in srgb, var(--pc) 60%, transparent); transform: scale(1.03); }
 #swatches { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
 #swatches button { aspect-ratio: 1; border-radius: 50%; border: 2px solid transparent; background: var(--c); padding: 0; }
 #swatches button[aria-pressed=true] { border-color: var(--text); box-shadow: 0 0 0 2px var(--ink) inset; }
 #swatches button:disabled { opacity: .18; cursor: default; }
+.seatlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.seatlist li { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px 8px 6px 4px; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; transition: transform .15s; }
+.seatlist li.holding { transform: scale(.985); }
+.seatlist li.dragging { border-color: var(--text); background: color-mix(in srgb, var(--panel) 80%, var(--text)); box-shadow: 0 6px 22px #0008; position: relative; z-index: 1; transform: scale(1.02); }
+.seatlist li.now { border-color: var(--pc); }
+.seatlist li.ask { padding: 10px 12px; gap: 10px; flex-wrap: wrap; border-style: dashed; }
+.grip { flex: none; width: 36px; height: 40px; border: 0; background: none; color: var(--mute); border-radius: 10px; cursor: grab; display: grid; place-items: center; padding: 0; }
+.grip svg { width: 20px; height: 20px; fill: currentColor; }
+.dot { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--c); }
+.who { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+.who small { display: block; font-weight: 400; font-size: 13px; color: var(--mute); }
+.empty { color: var(--mute); border: 1px dashed var(--line); border-radius: 12px; padding: 14px; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.setting.col { flex-direction: column; align-items: stretch; gap: 6px; }
+.setting > label.big { font-size: 16px; color: var(--text); }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; flex-wrap: wrap; }
 .seg button { background: none; border: 0; padding: 8px 10px; white-space: nowrap; color: var(--mute); font-size: 14px; }
 .seg button[aria-pressed=true] { background: var(--text); color: var(--ink); font-weight: 700; }
 input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--text); }
-
+.timerbox { display: flex; flex-direction: column; gap: 10px; }
+.timerbox .seg { align-self: flex-start; }
+.timerbox .custom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--mute); font-size: 14px; flex-direction: row; }
+input.num[type=text] { flex: none; width: 58px; text-align: center; padding: 9px 4px; font-variant-numeric: tabular-nums; }
 .invite { display: flex; flex-direction: column; gap: 10px; }
 .invite .code { font: 800 34px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; }
 .invite .link { font-size: 13px; color: var(--mute); overflow-wrap: anywhere; user-select: all; }
 .qr { align-self: flex-start; background: #fff; border-radius: 10px; padding: 6px; line-height: 0; }
 .qr svg { width: 148px; height: 148px; }
-details > .invite { margin-top: 10px; }
 #codeInput { text-transform: lowercase; letter-spacing: .1em; }
 
 /* Play */
-.status { display: flex; justify-content: space-between; align-items: center; color: var(--mute); font-size: 14px; }
-.status .btn { color: var(--text); }
-.panel { display: flex; flex-direction: column; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-.panel[hidden] { display: none; }
-.panel h2 { margin: 0; }
-.panel table { margin-top: 0; }
-.ring { --p: 1; align-self: center; width: min(100%, 330px, 46vh); aspect-ratio: 1; border-radius: 50%; padding: 7px;
-  background: conic-gradient(var(--pc) calc(var(--p) * 1turn), var(--line) 0); transition: opacity .3s; }
+.tabs { align-self: center; display: flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+.tabs button { background: none; border: 0; padding: 6px 14px; font-size: 13px; color: var(--mute); }
+.tabs button[aria-pressed=true] { background: var(--panel); color: var(--text); font-weight: 700; }
+.pager { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -18px; }
+.pager::-webkit-scrollbar { display: none; }
+.page { flex: none; width: 100%; scroll-snap-align: center; scroll-snap-stop: always; padding: 26px 18px 10px; display: flex; flex-direction: column; gap: 14px; }
+.ring { --p: 1; align-self: center; width: min(100%, 340px, max(190px, calc(100dvh - 330px))); aspect-ratio: 1; border-radius: 50%; padding: 7px;
+  background: conic-gradient(var(--pc) calc(var(--p) * 1turn), var(--line) 0); }
+.ring.slow { background: conic-gradient(var(--slow) calc(var(--p) * 1turn), var(--line) 0); }
 .ring.over { background: var(--alert); animation: blink .7s steps(2) infinite; }
-.orb { width: 100%; height: 100%; border-radius: 50%; border: 6px solid var(--ink); padding: 12%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
+.ring.shake { animation: shake .5s; }
+.orb { width: 100%; height: 100%; border-radius: 50%; border: 6px solid var(--ink); padding: 11%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; text-align: center;
   background: radial-gradient(circle at 35% 28%, color-mix(in srgb, var(--pc) 62%, white), var(--pc) 48%, color-mix(in srgb, var(--pc) 58%, black));
   color: #14121c; transition: filter .35s, box-shadow .35s; }
-.orb-label { font: 800 clamp(26px, 9vw, 40px)/1 var(--display); letter-spacing: -0.03em; overflow-wrap: anywhere; }
-.orb-time { font: 700 22px/1 var(--body); font-variant-numeric: tabular-nums; }
-.orb-hint { font-size: 14px; }
-.ring.on .orb { box-shadow: 0 0 70px color-mix(in srgb, var(--pc) 75%, transparent); animation: breathe 1.8s ease-in-out infinite; }
-.ring.deck { opacity: .95; }
+.orb-label { font: 800 clamp(24px, 8.5vw, 38px)/1 var(--display); letter-spacing: -0.03em; overflow-wrap: anywhere; }
+.orb-time { font: 700 26px/1 var(--body); font-variant-numeric: tabular-nums; }
+.orb-stat { font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 700; }
+.orb-hint { font-size: 13px; }
+.ring.on .orb { box-shadow: 0 0 46px color-mix(in srgb, var(--pc) 75%, transparent); animation: breathe 1.8s ease-in-out infinite; }
 .ring.deck .orb { filter: brightness(.5) saturate(.85); color: #fff; }
 .ring.idle .orb { filter: brightness(.2) saturate(.7); color: #fff; }
-.ring.idle .orb > *, .ring.deck .orb > * { filter: brightness(2.6); }
+.ring.deck .orb > * { filter: brightness(2.6); }
 .ring.idle .orb > * { filter: brightness(5); }
-.ring.paused .orb { animation: none; filter: grayscale(.7) brightness(.45); color: #fff; }
-.ring.paused .orb > * { filter: brightness(2.4); }
-@keyframes breathe { 50% { transform: scale(1.035); } }
+.ring.paused .orb { animation: none; filter: none; box-shadow: none; color: var(--text); background: radial-gradient(circle at 35% 28%, #615c70, #2e2a3a 60%, #1f1c2a); }
+.ring.paused .orb > * { filter: none; }
+@keyframes breathe { 50% { transform: scale(1.03); } }
 @keyframes blink { 50% { opacity: .35; } }
-.order { list-style: none; margin: 0; padding: 0 0 4px; display: flex; gap: 8px; overflow-x: auto; }
-.order li { flex: none; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px 6px 8px; font-size: 14px; color: var(--mute); }
-.order li:first-child { color: var(--text); border-color: var(--text); font-weight: 700; }
-.order .dot { width: 12px; height: 12px; }
-.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-details { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
-summary { cursor: pointer; color: var(--mute); }
-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; margin-top: 8px; }
+@keyframes shake { 20%, 60% { transform: translateX(-9px) rotate(-2deg); } 40%, 80% { transform: translateX(9px) rotate(2deg); } }
+.side { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.roundline { display: flex; justify-content: space-between; gap: 10px; color: var(--mute); font-size: 14px; }
+.pausebtn { align-self: center; min-width: 200px; display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 700; font-size: 17px; border-color: var(--mute); min-height: 52px; }
+.pausebtn i { display: inline-block; width: 14px; height: 16px; border-left: 5px solid currentColor; border-right: 5px solid currentColor; }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.grid.emo { grid-template-columns: repeat(4, 1fr); }
+.grid.emo button { font-size: 28px; padding: 8px 0; }
+#fxLayer { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
+.floaty { position: absolute; bottom: -60px; font-size: 44px; animation: floatUp 3.2s ease-in forwards; }
+@keyframes floatUp { to { transform: translateY(-115vh) rotate(12deg); opacity: .2; } }
+.toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 12px; max-width: min(92vw, 420px);
+  background: var(--text); color: var(--ink); border-radius: 14px; padding: 10px 12px 10px 16px; box-shadow: 0 8px 30px #000a; font-weight: 700; }
+.toast .btn { background: var(--ink); color: var(--text); border-color: var(--ink); }
+
+/* Menu */
+.menu { position: fixed; inset: 0; z-index: 6; background: var(--ink); overflow-y: auto; }
+.menu-in { max-width: 460px; margin: 0 auto; padding: 12px 18px 40px; display: flex; flex-direction: column; gap: 14px; }
+.menu-top { display: flex; align-items: center; justify-content: space-between; }
+.menu-top b { font: 800 20px/1 var(--display); }
+.menu section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; gap: 12px; }
+.menu section h2 { margin: 0; color: var(--text); }
+.menu .seatlist li { background: var(--ink); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
 th, td { text-align: right; padding: 7px 0 7px 8px; border-top: 1px solid var(--line); }
 th { color: var(--mute); font-weight: 400; border-top: 0; }
 th:first-child, td:first-child { text-align: left; padding-left: 0; overflow-wrap: anywhere; }
 td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
+
+/* Phone turned sideways: light on the left, controls on the right. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .app { max-width: 860px; gap: 8px; padding-top: 8px; }
+  .tabs { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); }
+  .page { padding-top: 8px; padding-bottom: 4px; }
+  #pageMain { flex-direction: row; align-items: flex-start; justify-content: center; gap: 28px; }
+  .ring { width: max(150px, min(44vw, calc(100dvh - 84px))); flex: none; align-self: flex-start; }
+  .side { align-self: flex-start; margin-top: max(0px, calc((100dvh - 84px) / 2 - 60px)); }
+  .side { flex: 1; max-width: 320px; }
+  #pageTalk { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px; align-content: start; }
+  #pageTalk h2 { grid-column: 1 / -1; }
+  #pageTalk .grid { grid-column: 1 / -1; grid-template-columns: repeat(3, 1fr); }
+  #pageTalk .grid.emo { grid-template-columns: repeat(8, 1fr); }
+  #pageTalk > .btn, #pageTalk > .hint { grid-column: 1 / -1; }
+  .menu-in, #lobby, #done, #home { max-width: 640px; }
+  #lobby, #done, #home, #claim { align-self: center; width: 100%; }
+}
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
 <div class="art" id="art" aria-hidden="true"></div>
+<div id="fxLayer" aria-hidden="true"></div>
 <div class="app">
   <header>
     <span class="mark"><i></i><span id="markText">Turnlight</span></span>
+    <span class="clock" id="gameClock" title="Game time" hidden></span>
     <span class="chip" id="syncChip" hidden>Connecting</span>
-    <button class="btn small" id="soundBtn" type="button" aria-pressed="true">Sound on</button>
+    <button class="btn small" id="menuBtn" type="button" aria-label="Menu" aria-haspopup="dialog" hidden><span aria-hidden="true">☰</span></button>
   </header>
 
   <section id="home" hidden>
@@ -187,6 +226,27 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
         <p class="lede">Your phone glows on your turn and warms up when you are next.</p>
       </div>
     </div>
+    <form id="seatForm">
+      <label for="nameInput">Your name</label>
+      <input type="text" id="nameInput" maxlength="36" autocomplete="off" placeholder="Name">
+      <div id="swatches" role="group" aria-label="Player colour"></div>
+      <button class="joinbtn" id="seatBtn" type="submit" disabled>Take a seat</button>
+    </form>
+    <h2>Turn order</h2>
+    <ol id="seats" class="seatlist"></ol>
+    <p class="empty" id="noSeats">No one is seated yet. Enter your name above, then have each player scan the code or open the link on their own phone.</p>
+    <div class="row" id="orderTools" hidden>
+      <button class="btn" id="shuffleBtn" type="button" style="flex:1">Shuffle order</button>
+      <button class="btn" id="firstBtn" type="button" style="flex:1">Random first player</button>
+    </div>
+    <p class="hint" id="dragHint" hidden>Press and hold a player to move them in the turn order.</p>
+    <form id="extraForm">
+      <label for="extraInput">Add a player with no phone</label>
+      <div class="row">
+        <input type="text" id="extraInput" maxlength="36" autocomplete="off" placeholder="Name">
+        <button class="btn" type="submit">Add</button>
+      </div>
+    </form>
     <h2>Invite the table</h2>
     <div class="invite">
       <span class="code" id="codeText"></span>
@@ -194,34 +254,21 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
       <span class="link" id="linkText"></span>
       <div class="row"><button class="btn" id="copyBtn" type="button" style="flex:1">Copy link</button><button class="btn" id="shareBtn" type="button" style="flex:1" hidden>Share</button></div>
     </div>
-    <h2>Turn order</h2>
-    <ol id="seats" class="seatlist"></ol>
-    <p class="hint" id="dragHint">Drag the handle to change the turn order.</p>
-    <p class="empty" id="noSeats">No one is seated yet. Add your name below, then have each player scan the code or open the link on their own phone.</p>
-    <form id="seatForm">
-      <label for="nameInput" id="formLabel">Your name</label>
-      <div class="row">
-        <input type="text" id="nameInput" maxlength="36" autocomplete="off" placeholder="Name">
-        <button class="btn" id="seatBtn" type="submit">Take a seat</button>
-      </div>
-      <div id="swatches" role="group" aria-label="Player colour"></div>
-    </form>
     <h2>Table rules</h2>
-    <div class="setting" style="flex-direction:column;align-items:stretch;gap:6px">
+    <div class="setting col">
       <label for="gameInput">Game name (optional)</label>
       <input type="text" id="gameInput" maxlength="36" autocomplete="off" placeholder="Shown at the top, with matching art">
     </div>
-    <div class="setting" style="flex-direction:column;align-items:stretch;gap:6px">
+    <div class="setting col">
       <label for="artInput">Background picture link (optional)</label>
       <input type="text" id="artInput" maxlength="600" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url" placeholder="Paste an image address to use your own">
       <span class="hint" id="artHint">Leave empty to look for a picture of the game automatically.</span>
     </div>
-    <div class="setting" style="flex-direction:column;align-items:stretch;gap:8px"><span>Turn timer</span><div class="timerbox" id="timerLobby"></div></div>
-    <div class="setting"><label for="rotToggle" style="font-size:16px;color:var(--text)">Pass first player each round</label><input type="checkbox" id="rotToggle"></div>
+    <div class="setting col" style="gap:8px"><span>Turn timer</span><div class="timerbox" id="timerLobby"></div></div>
+    <div class="setting"><label class="big" for="rotToggle">Pass first player each round</label><input type="checkbox" id="rotToggle"></div>
     <button class="btn primary" id="startBtn" type="button">Start game</button>
     <p class="lede" id="startHint"></p>
     <button class="btn" id="hostBtn" type="button" hidden>The host is away. Make me the host</button>
-    <button class="btn ghost" id="leaveBtn" type="button">Leave this table</button>
   </section>
 
   <section id="claim" hidden>
@@ -231,36 +278,45 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
   </section>
 
   <section id="play" hidden>
-    <div class="status"><span id="roundLabel"></span><button class="btn small" id="modeBtn" type="button" aria-expanded="false" aria-controls="timerPanel"><span id="modeLabel"></span> <span aria-hidden="true" id="modeCaret">▾</span></button></div>
-    <div class="panel" id="timerPanel" hidden>
-      <h2>Turn timer</h2>
-      <div class="timerbox" id="timerPlay"></div>
-      <h2>Time per player</h2>
-      <table id="liveStats"></table>
+    <div class="tabs">
+      <button type="button" id="tabMain" aria-pressed="true">Light</button>
+      <button type="button" id="tabTalk" aria-pressed="false">Table talk</button>
     </div>
-    <div class="ring" id="ring">
-      <button class="orb" id="orb" type="button">
-        <span class="orb-label" id="orbLabel"></span>
-        <span class="orb-time" id="orbTime"></span>
-        <span class="orb-hint" id="orbHint"></span>
-      </button>
+    <div class="pager" id="pager">
+      <div class="page" id="pageMain">
+        <div class="ring" id="ring">
+          <button class="orb" id="orb" type="button">
+            <span class="orb-label" id="orbLabel"></span>
+            <span class="orb-time" id="orbTime"></span>
+            <span class="orb-stat" id="orbStat"></span>
+            <span class="orb-hint" id="orbHint"></span>
+          </button>
+        </div>
+        <div class="side">
+          <p class="roundline"><span id="roundLabel"></span><span id="nextLabel"></span></p>
+          <button class="btn primary pulse" id="resumeBig" type="button" hidden>Resume</button>
+          <button class="btn pausebtn" id="pauseBtn" type="button"><i aria-hidden="true"></i>Pause</button>
+          <button class="btn" id="proxyBtn" type="button" hidden></button>
+          <button class="btn" id="allBackBtn" type="button" hidden>End planning phase</button>
+        </div>
+      </div>
+      <div class="page" id="pageTalk">
+        <h2>Reactions</h2>
+        <div class="grid emo" id="emoGrid"></div>
+        <h2>Nudge</h2>
+        <button class="btn" id="nudgeBtn" type="button"></button>
+        <h2>Soundboard</h2>
+        <div class="grid" id="boardGrid"></div>
+        <p class="hint">Everyone at the table sees and hears these. Sounds follow each phone's own sound setting.</p>
+      </div>
     </div>
-    <ol class="order" id="order" aria-label="Upcoming turns"></ol>
-    <button class="btn" id="proxyBtn" type="button"></button>
-    <button class="btn" id="allBackBtn" type="button" hidden>Back to turn order</button>
-    <div class="controls">
-      <button class="btn" id="undoBtn" type="button">Undo last turn</button>
-      <button class="btn" id="pauseBtn" type="button">Pause</button>
-    </div>
-    <details id="orderBox"><summary>Turn order</summary><ol id="playSeats" class="seatlist"></ol><p class="hint" style="margin:8px 0 10px">Drag the handle. The current turn stays with the same player.</p><div class="setting" style="margin-bottom:12px"><label for="rotPlay" style="font-size:16px;color:var(--text)">Pass first player each round</label><input type="checkbox" id="rotPlay"></div><button class="btn" id="allBtn" type="button" style="width:100%">Everyone plays at once</button></details>
-    <details><summary>Table code <span id="codeSmall"></span></summary><div class="invite"><div class="qr" id="qrSmall" hidden></div><span class="link" id="linkSmall"></span></div></details>
-    <button class="btn ghost danger" id="endBtn" type="button">End game</button>
   </section>
 
   <section id="done" hidden>
     <h1>Game over</h1>
     <p class="lede" id="doneLine"></p>
     <table id="finalStats"></table>
+    <p class="hint" id="paceLine"></p>
     <button class="btn primary" id="resumeBtn" type="button">Ended by mistake? Resume this game</button>
     <button class="btn" id="againBtn" type="button">Start a new game, same seats</button>
     <p class="hint" id="againHint"></p>
@@ -268,6 +324,56 @@ td .dot { display: inline-block; width: 10px; height: 10px; margin-right: 7px; }
   </section>
   <p class="credit" id="artCredit" hidden><a id="artLink" target="_blank" rel="noopener">Background picture source</a></p>
 </div>
+
+<div class="menu" id="menu" role="dialog" aria-modal="true" aria-label="Menu" hidden>
+  <div class="menu-in">
+    <div class="menu-top"><b>Menu</b><button class="btn small" id="menuClose" type="button">Close</button></div>
+
+    <section data-phase="play">
+      <h2>Timing</h2>
+      <p class="hint" id="modeLabel"></p>
+      <div class="timerbox" id="timerPlay"></div>
+      <table id="liveStats"></table>
+    </section>
+
+    <section data-phase="play">
+      <h2>Order</h2>
+      <ol id="playSeats" class="seatlist"></ol>
+      <p class="hint">Tap a player to jump to their turn. Press and hold to move them. The turn order itself only changes when you move someone.</p>
+      <div class="setting"><label class="big" for="rotPlay">Pass first player each round</label><input type="checkbox" id="rotPlay"></div>
+      <button class="btn" id="undoBtn" type="button">Undo last turn</button>
+    </section>
+
+    <section data-phase="play">
+      <h2>Phases</h2>
+      <button class="btn" id="allBtn" type="button">Start a planning phase</button>
+      <p class="hint">Everyone plans at once and taps Ready. Turns pick up again when the whole table is ready.</p>
+      <button class="btn" id="breakBtn" type="button">Take a break</button>
+      <p class="hint">A break stops the turn clock and the game clock. Pause only stops the turn clock.</p>
+    </section>
+
+    <section>
+      <h2>Sound</h2>
+      <div class="setting"><label class="big" for="soundToggle">Sound on this phone</label><input type="checkbox" id="soundToggle"></div>
+      <div class="setting col" style="gap:8px"><span>Your-turn alert</span><div class="seg" id="toneSeg"></div></div>
+    </section>
+
+    <section>
+      <h2>Table</h2>
+      <p class="hint" id="syncText"></p>
+      <div class="invite"><span class="code" id="codeSmall"></span><div class="qr" id="qrSmall" hidden></div><span class="link" id="linkSmall"></span></div>
+      <button class="btn ghost" id="leaveBtn" type="button">Leave this table</button>
+    </section>
+
+    <section data-phase="play">
+      <h2>Finish</h2>
+      <button class="btn danger" id="endBtn" type="button">End game</button>
+      <p class="hint">Ending shows the final times. Anyone can resume from there if it was a mistake.</p>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" hidden><span id="toastText"></span><button class="btn small" id="toastBtn" type="button" hidden></button></div>
 
 <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
@@ -283,7 +389,7 @@ const limitName = s => !s ? 'Off' : s < 60 ? s + 's' : s % 60 ? Math.floor(s / 6
 const rand = () => Math.random().toString(36).slice(2, 10) || 'x';
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-const blank = () => ({ v: 1, rev: 0, tie: '', phase: 'lobby', players: [], cur: 0, first: 0, round: 1, start: 0, paused: 0, limit: 0, rot: false, mode: 'turn', aid: '', done: [], hold: 0, h: null, game: '', host: '', art: '' });
+const blank = () => ({ v: 1, rev: 0, tie: '', phase: 'lobby', players: [], cur: 0, first: 0, round: 1, start: 0, paused: 0, limit: 0, rot: false, mode: 'turn', aid: '', done: [], hold: 0, h: null, game: '', host: '', art: '', gs: 0, brk: 0, brkAt: 0, endAt: 0, bp: false });
 const int = (x, lo, hi, d) => Number.isFinite(x) ? Math.min(hi, Math.max(lo, Math.floor(x))) : d;
 
 // Everything arriving from another phone passes through here.
@@ -309,7 +415,8 @@ function validate(g) {
     aid: String(g.aid ?? '').slice(0, 12), done: Array.isArray(g.done) ? g.done.filter(x => seen.has(x)).slice(0, 10) : [],
     hold: int(g.hold, 0, 1e9, 0), h, game: typeof g.game === 'string' ? g.game.replace(/\s+/g, ' ').trim().slice(0, 36) : '',
     host: typeof g.host === 'string' && /^[a-z0-9]{1,16}$/.test(g.host) ? g.host : '',
-    art: cleanArt(g.art) };
+    art: cleanArt(g.art),
+    gs: int(g.gs, 0, 1e14, 0), brk: int(g.brk, 0, 1e12, 0), brkAt: int(g.brkAt, 0, 1e14, 0), endAt: int(g.endAt, 0, 1e14, 0), bp: !!g.bp };
 }
 // A background picture link the table chose itself: https only, nothing that could break out of a CSS url().
 function cleanArt(u) { u = typeof u === 'string' ? u.trim() : ''; return u.length <= 600 && /^https:\/\/[^\s"'\\()<>]+$/.test(u) ? u : ''; }
@@ -348,7 +455,7 @@ function refreshPeers() {
   for (const [k, v] of peerMap) if (!v.me && now - v.at > 13000) peerMap.delete(k);
   peers = [...peerMap.values()];
   const sig = peers.map(p => (p.seat || '-') + '/' + (p.d || '-')).sort().join(',') + '|' + anyUp();
-  if (sig !== liveSig) { liveSig = sig; renderSync(); render(); }
+  if (sig !== liveSig) { liveSig = sig; render(); }
 }
 function commit(mutate) {
   const next = JSON.parse(JSON.stringify(S));
@@ -373,7 +480,8 @@ function onMessage(link, t, txt) {
       if (m.bye) peerMap.delete(m.c); else peerMap.set(m.c, { seat: typeof m.seat === 'string' ? m.seat : null, d: typeof m.d === 'string' ? m.d.slice(0, 16) : '', at: Date.now() });
       refreshPeers();
     } catch {}
-  } else if (kind === 'hello' && txt !== clientId) { link.seen = ''; schedule(); beat(); }
+  } else if (kind === 'fx') { try { onFx(JSON.parse(txt)); } catch {} }
+  else if (kind === 'hello' && txt !== clientId) { link.seen = ''; schedule(); beat(); }
 }
 // Two phones acting in the same instant: the loser quietly repeats its own action.
 function reapply() {
@@ -401,6 +509,8 @@ function connect() {
 
 /* ---------- game rules ---------- */
 const elapsed = () => Math.max(0, (S.paused || Date.now()) - S.start);
+// The game clock runs through pauses. Only a break (or the end screen) holds it.
+const gameTime = () => S.gs ? Math.max(0, (S.endAt || S.brkAt || Date.now()) - S.gs - S.brk) : 0;
 function step(cur, first, n, rot) {
   let nx = (cur + 1) % n, wrap = false;
   if (nx === first) { wrap = true; if (rot) { first = (first + 1) % n; nx = first; } }
@@ -417,45 +527,88 @@ function upcoming() {
 function reorder(ids) {
   commit(s => {
     if (ids.length !== s.players.length || !s.players.every(p => ids.includes(p.id))) return;
-    const curId = s.players[s.cur] && s.players[s.cur].id, firstId = s.players[s.first] && s.players[s.first].id, undoId = s.h && s.players[s.h[0]] && s.players[s.h[0]].id, undoFirstId = s.h && s.players[s.h[1]] && s.players[s.h[1]].id;
+    const idAt = i => s.players[i] && s.players[i].id;
+    const curId = idAt(s.cur), firstId = idAt(s.first), undoId = s.h && idAt(s.h[0]), undoFirstId = s.h && idAt(s.h[1]);
     s.players = ids.map(id => s.players.find(p => p.id === id));
     const at = id => Math.max(0, s.players.findIndex(p => p.id === id));
     if (s.phase !== 'lobby') { s.cur = at(curId); s.first = at(firstId); if (s.h) { s.h[0] = at(undoId); s.h[1] = at(undoFirstId); } }
   });
 }
-let sorting = false;
+function shuffleOrder() {
+  const ids = S.players.map(p => p.id);
+  if (ids.length < 2) return;
+  const before = ids.join();
+  for (let tries = 0; tries < 6; tries++) {
+    for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+    if (ids.join() !== before) break;
+  }
+  reorder(ids);
+}
+// Keeps the seating order and only changes who goes first.
+function randomFirst() {
+  const ids = S.players.map(p => p.id), n = ids.length;
+  if (n < 2) return null;
+  const k = Math.floor(Math.random() * n);
+  reorder(ids.slice(k).concat(ids.slice(0, k)));
+  return S.players[0];
+}
+
+/* Touch: press and hold a row for a moment, then drag. A plain swipe scrolls
+   the page as usual, so thumbs no longer reshuffle the table by accident.
+   Mouse and keyboard use the grip handle. */
+let sorting = false, dragEndedAt = 0;
 function makeSortable(list) {
-  let item = null, pid = null;
-  const ids = () => [...list.children].map(li => li.dataset.id);
-  const finish = save => {
+  let item = null, pid = null, timer = 0, sx = 0, sy = 0, armed = false, moved = false;
+  const ids = () => [...list.children].filter(li => li.dataset.id).map(li => li.dataset.id);
+  const engage = () => {
+    timer = 0;
     if (!item) return;
-    item.classList.remove('dragging'); list.classList.remove('sorting');
-    try { list.releasePointerCapture(pid); } catch {}
-    item = null; pid = null; sorting = false;
-    if (save) reorder(ids());
-    render();
+    armed = true; sorting = true;
+    item.classList.remove('holding'); item.classList.add('dragging'); list.classList.add('sorting');
+    try { navigator.vibrate && navigator.vibrate(15); } catch {}
+    try { list.setPointerCapture(pid); } catch {}
+  };
+  const reset = () => {
+    clearTimeout(timer); timer = 0;
+    if (item) item.classList.remove('dragging', 'holding');
+    list.classList.remove('sorting');
+    try { if (pid !== null) list.releasePointerCapture(pid); } catch {}
+    item = null; pid = null; armed = false; sorting = false;
   };
   list.addEventListener('pointerdown', e => {
-    const grip = e.target.closest && e.target.closest('.grip');
-    if (!grip || item) return;
-    e.preventDefault();
-    item = grip.closest('li'); pid = e.pointerId; sorting = true;
-    item.classList.add('dragging'); list.classList.add('sorting');
-    try { list.setPointerCapture(pid); } catch {}
+    if (item || !e.target.closest) return;
+    const li = e.target.closest('li'), onGrip = !!e.target.closest('.grip');
+    if (!li || !li.dataset.id || li.parentNode !== list) return;
+    if (!onGrip && e.target.closest('button, input, a')) return;
+    const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
+    if (!touch && !onGrip) return;
+    item = li; pid = e.pointerId; sx = e.clientX; sy = e.clientY; moved = false;
+    if (touch) { li.classList.add('holding'); timer = setTimeout(engage, 350); }
+    else { e.preventDefault(); engage(); }
   });
   list.addEventListener('pointermove', e => {
     if (!item || e.pointerId !== pid) return;
-    e.preventDefault();
+    if (!armed) { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) reset(); return; }   // it was a scroll, not a hold
+    e.preventDefault(); moved = true;
     for (const li of list.children) {
-      if (li === item) continue;
+      if (li === item || !li.dataset.id) continue;
       const r = li.getBoundingClientRect(), mid = r.top + r.height / 2;
-      const before = !!(item.compareDocumentPosition(li) & Node.DOCUMENT_POSITION_FOLLOWING);
-      if (before && e.clientY > mid) { li.after(item); break; }       // dragged past the row below
-      if (!before && e.clientY < mid) { li.before(item); break; }     // dragged past the row above
+      const below = !!(item.compareDocumentPosition(li) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (below && e.clientY > mid) { li.after(item); break; }
+      if (!below && e.clientY < mid) { li.before(item); break; }
     }
   });
-  list.addEventListener('pointerup', e => { if (e.pointerId === pid) finish(true); });
-  list.addEventListener('pointercancel', e => { if (e.pointerId === pid) finish(false); });
+  list.addEventListener('pointerup', e => {
+    if (e.pointerId !== pid) return;
+    const did = armed && moved, order = ids(), was = armed;
+    reset();
+    if (was) dragEndedAt = Date.now();
+    if (did) reorder(order);
+    if (was) render();
+  });
+  list.addEventListener('pointercancel', e => { if (e.pointerId === pid) { const was = armed; reset(); if (was) render(); } });
+  list.addEventListener('touchmove', e => { if (armed) e.preventDefault(); }, { passive: false });
+  list.addEventListener('contextmenu', e => { if (item) e.preventDefault(); });
   list.addEventListener('keydown', e => {
     const grip = e.target.closest && e.target.closest('.grip');
     if (!grip || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
@@ -469,7 +622,8 @@ function makeSortable(list) {
   });
 }
 const GRIP = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="7" cy="5" r="1.6"/><circle cx="13" cy="5" r="1.6"/><circle cx="7" cy="10" r="1.6"/><circle cx="13" cy="10" r="1.6"/><circle cx="7" cy="15" r="1.6"/><circle cx="13" cy="15" r="1.6"/></svg>';
-function gripFor(p) { const b = h('button', { class: 'grip', type: 'button', 'aria-label': 'Reorder ' + p.n + '. Drag, or use the up and down arrow keys' }); b.innerHTML = GRIP; return b; }
+function gripFor(p) { const b = h('button', { class: 'grip', type: 'button', 'aria-label': 'Reorder ' + p.n + '. Press and hold to drag, or use the up and down arrow keys' }); b.innerHTML = GRIP; return b; }
+
 function addSeat(id, n, c) {
   commit(s => { if (s.phase === 'lobby' && s.players.length < 10 && !s.players.some(p => p.id === id)) { s.players.push({ id, n, c, t: 0, k: 0, mx: 0 }); if (!s.host) s.host = myId; } });
 }
@@ -478,43 +632,87 @@ const isHost = () => !S.host || S.host === myId;
 const hostHere = () => !S.host || peers.some(p => p.d === S.host);
 const hostName = () => { const p = S.players.find(x => x.id === S.host); return p ? p.n : 'the host'; };
 function setLimit(v) { v = int(v, 0, MAX_LIMIT, 0); commit(s => { s.limit = v; }); }
-function endGame() { commit(s => { if (s.phase !== 'play') return; if (!s.paused) s.paused = Date.now(); s.phase = 'done'; }); }
-// Ending freezes the clock, so resuming picks the turn up exactly where it stopped.
-function resumeGame() { commit(s => { if (s.phase !== 'done') return; const now = Date.now(); if (s.paused) s.start += now - s.paused; s.paused = 0; s.phase = 'play'; }); }
 function startGame() {
   if (!isHost()) return;
   commit(s => {
     if (s.players.length < 2) return;
     s.players.forEach(p => { p.t = 0; p.k = 0; p.mx = 0; });
-    Object.assign(s, { phase: 'play', cur: 0, first: 0, round: 1, start: Date.now(), paused: 0, mode: 'turn', done: [], hold: 0, h: null });
+    const now = Date.now();
+    Object.assign(s, { phase: 'play', cur: 0, first: 0, round: 1, start: now, paused: 0, mode: 'turn', done: [], hold: 0, h: null, gs: now, brk: 0, brkAt: 0, endAt: 0, bp: false });
   });
+}
+// Ending freezes both clocks, so resuming picks everything up exactly where it stopped.
+function endGame() {
+  commit(s => {
+    if (s.phase !== 'play') return;
+    const now = Date.now();
+    if (s.brkAt) { s.brk += now - s.brkAt; s.brkAt = 0; s.bp = false; }
+    if (!s.paused) s.paused = now;
+    s.endAt = now; s.phase = 'done';
+  });
+}
+function resumeGame() {
+  commit(s => {
+    if (s.phase !== 'done') return;
+    const now = Date.now();
+    if (s.endAt) s.brk += now - s.endAt;
+    s.endAt = 0;
+    if (s.paused) s.start += now - s.paused;
+    s.paused = 0; s.phase = 'play';
+  });
+}
+// Close the running turn for the current player and hand the light to `next`.
+function passTurn(s, next, first, wrap) {
+  const now = Date.now();
+  if (s.paused) { s.start += now - s.paused; s.paused = 0; }
+  const el = Math.max(0, now - s.start), p = s.players[s.cur];
+  s.h = [s.cur, s.first, s.round, el, p.mx];
+  p.t += el; p.k++; p.mx = Math.max(p.mx, el);
+  s.cur = next; s.first = first; if (wrap) s.round++;
+  s.start = now;
 }
 function endTurn() {
   commit(s => {
-    if (s.phase !== 'play' || s.mode !== 'turn') return;
-    const now = Date.now();
-    if (s.paused) { s.start += now - s.paused; s.paused = 0; }
-    const el = Math.max(0, now - s.start), p = s.players[s.cur];
-    s.h = [s.cur, s.first, s.round, el, p.mx];
-    p.t += el; p.k++; p.mx = Math.max(p.mx, el);
+    if (s.phase !== 'play' || s.mode !== 'turn' || s.brkAt) return;
     const [nx, first, wrap] = step(s.cur, s.first, s.players.length, s.rot);
-    s.cur = nx; s.first = first; if (wrap) s.round++;
-    s.start = now;
+    passTurn(s, nx, first, wrap);
+  });
+}
+// Jump straight to one player's turn. The order and the round stay as they are.
+function jumpTo(id) {
+  commit(s => {
+    const i = s.players.findIndex(p => p.id === id);
+    if (s.phase !== 'play' || s.mode !== 'turn' || s.brkAt || i < 0 || i === s.cur) return;
+    passTurn(s, i, s.first, false);
   });
 }
 function undo() {
   commit(s => {
-    if (!s.h || s.mode !== 'turn' || s.phase !== 'play') return;
+    if (!s.h || s.mode !== 'turn' || s.phase !== 'play' || s.brkAt) return;
     const [c, f, r, el, mx] = s.h, p = s.players[c], now = Date.now();
     p.t = Math.max(0, p.t - el); p.k = Math.max(0, p.k - 1); p.mx = mx;
     s.cur = c; s.first = f; s.round = r; s.start = now - el; s.paused = s.paused ? now : 0; s.h = null;
   });
 }
 function togglePause() {
-  commit(s => { const now = Date.now(); if (s.paused) { s.start += now - s.paused; s.paused = 0; } else s.paused = now; });
+  commit(s => { if (s.phase !== 'play' || s.brkAt) return; const now = Date.now(); if (s.paused) { s.start += now - s.paused; s.paused = 0; } else s.paused = now; });
 }
+// A break holds the game clock as well as the turn clock: food, drinks, a phone call.
+function takeBreak() {
+  commit(s => { if (s.phase !== 'play' || s.brkAt) return; const now = Date.now(); s.brkAt = now; if (!s.paused) { s.paused = now; s.bp = true; } });
+}
+function endBreak() {
+  commit(s => {
+    if (s.phase !== 'play' || !s.brkAt) return;
+    const now = Date.now();
+    s.brk += now - s.brkAt; s.brkAt = 0;
+    if (s.bp) { s.start += now - s.paused; s.paused = 0; s.bp = false; }
+  });
+}
+// Planning phase: everyone works at once and readies up.
 function toggleAll() {
   commit(s => {
+    if (s.phase !== 'play' || s.brkAt) return;
     const now = Date.now();
     if (s.mode === 'turn') { s.hold = Math.max(0, (s.paused || now) - s.start); s.mode = 'all'; s.aid = rand(); s.done = []; s.start = now; s.paused = 0; }
     else { s.mode = 'turn'; s.done = []; s.start = now - s.hold; s.paused = 0; }
@@ -545,28 +743,11 @@ function h(tag, attrs, ...kids) {
   return e;
 }
 const fmt = ms => { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const fmtLong = ms => { const s = Math.floor(ms / 1000), hh = Math.floor(s / 3600); return (hh ? hh + ':' + String(Math.floor(s / 60) % 60).padStart(2, '0') : String(Math.floor(s / 60))) + ':' + String(s % 60).padStart(2, '0'); };
 const liveSeats = () => new Set(peers.map(p => p.seat).filter(x => typeof x === 'string'));
 const mySeat = () => S.players.findIndex(p => p.id === myId);
 // True when no other seated phone is connected: this phone gets passed around.
 const passAround = () => !peers.some(p => !p.me && S.players.some(x => x.id === p.seat));
-
-function renderSync() {
-  const chip = $('syncChip'), up = anyUp();
-  chip.hidden = !roomCode;
-  chip.className = 'chip' + (up ? ' live' : '');
-  chip.textContent = !window.mqtt ? 'This phone only' : !up ? 'Reconnecting' : peers.length > 1 ? peers.length + ' phones synced' : 'Online';
-}
-const tableLink = () => location.origin + location.pathname + '#' + roomCode;
-function renderInvite() {
-  const link = tableLink();
-  $('codeText').textContent = roomCode; $('linkText').textContent = link;
-  $('codeSmall').textContent = roomCode.toUpperCase(); $('linkSmall').textContent = link;
-  const box = $('qrBox');
-  if (window.qrcode && !box.dataset.for) {
-    try { const q = window.qrcode(0, 'M'); q.addData(link); q.make(); const svg = q.createSvgTag({ cellSize: 4, margin: 1, scalable: true }); for (const b of [box, $('qrSmall')]) { b.innerHTML = svg; b.hidden = false; } box.dataset.for = roomCode; } catch {}
-  }
-  $('shareBtn').hidden = !navigator.share;
-}
 function buildTimer(box, key) {
   const seg = h('div', { class: 'seg' });
   LIMITS.forEach((v, i) => seg.append(h('button', { type: 'button', text: LIMIT_NAMES[i], 'aria-pressed': 'false', onclick: () => { form.hidden = true; setLimit(v); paintTimer(box); } })));
@@ -591,9 +772,8 @@ function paintTimer(box) {
   min.value = S.limit ? String(Math.floor(S.limit / 60)) : ''; sec.value = S.limit ? String(S.limit % 60) : '';
 }
 /* ---------- background art ----------
-   Looks the game name up on Wikipedia and uses the article's freely licensed
-   photo. Only an exact title match on an article described as a game counts;
-   anything less sure leaves the plain background. */
+   Finds a picture for the game name. Only a confident match on the exact
+   title is used; anything less sure leaves the plain background. */
 // Address of the picture relay (see relay/worker.js). Empty means BoardGameGeek lookups are off.
 const BGG_RELAY = window.TURNLIGHT_RELAY || '';
 const artCache = new Map();
@@ -688,6 +868,119 @@ function updateArt() {
   if (own) showArt({ url: own, link: own, name });
   else if (name) findArt(name).then(art => { if (artFor === name && art) showArt({ ...art, name }); });
 }
+/* ---------- sound ---------- */
+function tone(f, at, dur, o) {
+  o = o || {};
+  const a = audio, t = a.currentTime + at, osc = a.createOscillator(), g = a.createGain(), vol = o.vol || 0.22;
+  osc.type = o.type || 'sine';
+  osc.frequency.setValueAtTime(f, t);
+  if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc.connect(g); g.connect(a.destination); osc.start(t); osc.stop(t + dur + 0.03);
+}
+function hiss(at, dur, vol) {
+  const a = audio, n = Math.floor(a.sampleRate * dur), buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = a.createBufferSource(), g = a.createGain();
+  s.buffer = buf; g.gain.value = vol || 0.2; s.connect(g); g.connect(a.destination); s.start(a.currentTime + at);
+}
+const TONES = [
+  ['Chime', () => { tone(660, 0, 0.16); tone(880, 0.16, 0.24); }],
+  ['Bell', () => { tone(1047, 0, 0.9, { vol: 0.25 }); tone(2094, 0, 0.5, { vol: 0.08 }); }],
+  ['Blip', () => { tone(1200, 0, 0.07, { type: 'square', vol: 0.12 }); tone(1200, 0.12, 0.07, { type: 'square', vol: 0.12 }); }],
+  ['Fanfare', () => { [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.2, { type: 'triangle' })); }],
+  ['Knock', () => { tone(170, 0, 0.1, { vol: 0.45, to: 90 }); tone(170, 0.17, 0.1, { vol: 0.45, to: 90 }); }],
+];
+const BOARD = [
+  ['Rimshot', () => { tone(150, 0, 0.12, { to: 70, vol: 0.4 }); tone(150, 0.18, 0.12, { to: 70, vol: 0.4 }); hiss(0.38, 0.5, 0.25); }],
+  ['Sad trombone', () => { [[311, 0], [294, 0.42], [277, 0.84]].forEach(([f, t]) => tone(f, t, 0.38, { type: 'sawtooth', vol: 0.14 })); tone(262, 1.26, 0.9, { type: 'sawtooth', vol: 0.14, to: 233 }); }],
+  ['Airhorn', () => { [440, 554, 659].forEach(f => { tone(f, 0, 0.22, { type: 'sawtooth', vol: 0.11 }); tone(f, 0.3, 0.7, { type: 'sawtooth', vol: 0.11 }); }); }],
+  ['Tick tock', () => { for (let i = 0; i < 6; i++) tone(i % 2 ? 900 : 1300, i * 0.25, 0.04, { type: 'square', vol: 0.15 }); }],
+  ['Ta-da', () => { [523, 659, 784].forEach(f => tone(f, 0, 0.15, { type: 'triangle' })); [587, 740, 880, 1175].forEach(f => tone(f, 0.2, 0.7, { type: 'triangle', vol: 0.16 })); }],
+  ['Buzzer', () => { tone(110, 0, 0.6, { type: 'square', vol: 0.18 }); tone(117, 0, 0.6, { type: 'square', vol: 0.12 }); }],
+];
+const EMOJI = ['👍', '😂', '😮', '👏', '🎉', '⏳', '😡', '💀'];
+let toneIdx = 0, lastBoard = 0;
+function play(fn) { if (!sound || !audio) return; try { if (audio.state === 'suspended') audio.resume().catch(() => {}); fn(); } catch {} }
+function buzz() {
+  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {}
+  play(TONES[toneIdx][1]);
+}
+function wake() {
+  try { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume().catch(() => {}); } catch {}
+  try { if (navigator.wakeLock && S.phase === 'play') navigator.wakeLock.request('screen').catch(() => {}); } catch {}
+}
+
+/* ---------- table talk: reactions, soundboard, nudges ----------
+   These are moments, not state. They go out once and are never stored. */
+const fxSeen = new Set(), fxLast = {};
+function sendFx(k, v, extra) {
+  const gap = { emo: 350, snd: 2500, nudge: 5000 }[k], now = Date.now();
+  if (now - (fxLast[k] || 0) < gap) return false;
+  fxLast[k] = now;
+  const m = Object.assign({ i: rand() + rand(), k, v }, extra || {});
+  const body = JSON.stringify(m);
+  onFx(m);
+  for (const l of links) if (l.up) { try { l.c.publish(topic('fx'), body, { qos: 0 }); } catch {} }
+  return true;
+}
+function onFx(m) {
+  if (!m || typeof m.i !== 'string' || m.i.length > 24 || fxSeen.has(m.i)) return;
+  if (fxSeen.size > 400) fxSeen.clear();
+  fxSeen.add(m.i);
+  const v = int(m.v, 0, 30, 0);
+  if (m.k === 'emo' && EMOJI[v]) floatEmoji(EMOJI[v]);
+  else if (m.k === 'snd' && BOARD[v]) { if (Date.now() - lastBoard > 1200) { lastBoard = Date.now(); play(BOARD[v][1]); } }
+  else if (m.k === 'nudge' && m.to === myId && mySeat() >= 0) {
+    try { navigator.vibrate && navigator.vibrate([220, 90, 220, 90, 220]); } catch {}
+    play(TONES[4][1]);
+    const ring = $('ring'); ring.classList.remove('shake'); void ring.offsetWidth; ring.classList.add('shake');
+    toast((typeof m.n === 'string' && m.n.trim() ? m.n.trim().slice(0, 36) : 'Someone') + ' nudged you');
+  }
+}
+function floatEmoji(ch) {
+  const layer = $('fxLayer');
+  for (let i = 0; i < 3; i++) {
+    const s = h('span', { class: 'floaty', text: ch, style: 'left:' + (8 + Math.random() * 78).toFixed(1) + '%;animation-delay:' + (i * 0.22).toFixed(2) + 's;font-size:' + (34 + Math.floor(Math.random() * 22)) + 'px' });
+    layer.append(s);
+    setTimeout(() => s.remove(), 3800);
+  }
+}
+let toastTimer = 0;
+function toast(msg, action, fn, ms) {
+  $('toastText').textContent = msg;
+  const b = $('toastBtn');
+  b.hidden = !action; b.textContent = action || ''; b.onclick = action ? () => { hideToast(); fn(); } : null;
+  $('toast').hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, ms || 3200);
+}
+function hideToast() { clearTimeout(toastTimer); $('toast').hidden = true; }
+
+/* ---------- screens ---------- */
+function syncWords() {
+  const up = anyUp();
+  return !window.mqtt ? 'This phone only' : !up ? 'Reconnecting' : peers.length > 1 ? peers.length + ' phones synced' : 'Online';
+}
+function renderSync() {
+  const chip = $('syncChip'), up = anyUp(), words = syncWords();
+  chip.hidden = !roomCode;
+  chip.className = 'chip' + (up ? ' live' : '');
+  chip.title = words;
+  chip.setAttribute('aria-label', words);
+  chip.textContent = S.phase === 'play' && up ? String(peers.length) : words;   // compact during play
+  $('syncText').textContent = words + '.';
+}
+const tableLink = () => location.origin + location.pathname + '#' + roomCode;
+function renderInvite() {
+  const link = tableLink();
+  $('codeText').textContent = roomCode; $('linkText').textContent = link;
+  $('codeSmall').textContent = roomCode; $('linkSmall').textContent = link;
+  const box = $('qrBox');
+  if (window.qrcode && !box.dataset.for) {
+    try { const q = window.qrcode(0, 'M'); q.addData(link); q.make(); const svg = q.createSvgTag({ cellSize: 4, margin: 1, scalable: true }); for (const b of [box, $('qrSmall')]) { b.innerHTML = svg; b.hidden = false; } box.dataset.for = roomCode; } catch {}
+  }
+  $('shareBtn').hidden = !navigator.share;
+}
 function claimSeat(id) { myId = id; lsSet('turnlight-id', myId); pendingSeat = null; lastKey = null; beat(); render(); }
 // A phone with no seat (site closed and reopened in another browser, cleared
 // storage, new phone) can take back any seat that no connected phone is using.
@@ -710,36 +1003,38 @@ function renderSwatches() {
   COLORS.forEach(([name, hex], i) => box.append(h('button', { type: 'button', style: '--c:' + hex, 'aria-label': name, 'aria-pressed': String(i === draftColor), disabled: taken.has(i),
     onclick: () => { draftColor = i; renderSwatches(); setColor(); } })));
 }
+// The join button lights up in the chosen colour as soon as a name is typed.
+function paintJoin() {
+  const ready = $('nameInput').value.trim().length > 0, b = $('seatBtn');
+  b.disabled = !ready; b.classList.toggle('ready', ready);
+}
 function renderLobby() {
-  const live = liveSeats(), me = mySeat(), list = $('seats');
+  const live = liveSeats(), me = mySeat(), list = $('seats'), n = S.players.length, full = n >= 10;
   if (!sorting) {
     list.replaceChildren();
     S.players.forEach((p, i) => {
       const mine = p.id === myId;
       const note = (mine ? 'This phone' : live.has(p.id) ? 'Phone connected' : 'No phone yet') + (p.id === S.host ? ' · Host' : '');
-      const who = h('span', { class: 'who', text: (i + 1) + '. ' + p.n }, h('small', { text: note }));
       const li = h('li', null, gripFor(p),
-        h('span', { class: 'dot', style: '--c:' + COLORS[p.c][1] }), who,
+        h('span', { class: 'dot', style: '--c:' + COLORS[p.c][1] }), h('span', { class: 'who', text: (i + 1) + '. ' + p.n }, h('small', { text: note })),
         me < 0 && !live.has(p.id) ? h('button', { class: 'btn small', type: 'button', text: "That's me", onclick: () => claimSeat(p.id) }) : null,
         h('button', { class: 'btn small', type: 'button', 'aria-label': 'Remove ' + p.n, text: '✕', onclick: () => { if (mine) pendingSeat = null; commit(s => { s.players = s.players.filter(x => x.id !== p.id); }); } }));
       li.dataset.id = p.id;
       list.append(li);
     });
   }
-  $('dragHint').hidden = S.players.length < 2;
+  $('seatForm').hidden = me >= 0 || full;
+  $('extraForm').hidden = full;
+  $('noSeats').hidden = n > 0;
+  $('orderTools').hidden = n < 2; $('dragHint').hidden = n < 2;
+  renderSwatches(); paintJoin();
   if (document.activeElement !== $('gameInput')) $('gameInput').value = S.game;
   if (document.activeElement !== $('artInput')) $('artInput').value = S.art;
-  $('noSeats').hidden = S.players.length > 0;
-  const full = S.players.length >= 10;
-  $('formLabel').textContent = me < 0 ? 'Your name' : 'Add a player who has no phone';
-  $('seatBtn').textContent = me < 0 ? 'Take a seat' : 'Add player';
-  $('seatBtn').disabled = full; $('nameInput').disabled = full;
-  renderSwatches();
   paintTimer($('timerLobby'));
   $('rotToggle').checked = S.rot;
   const host = isHost();
-  $('startBtn').disabled = S.players.length < 2 || !host;
-  $('startHint').textContent = !host ? 'Only ' + hostName() + ' can start the game.' : S.players.length < 2 ? 'Seat at least two players to start.' : full ? 'The table is full at 10 players.' : '';
+  $('startBtn').disabled = n < 2 || !host;
+  $('startHint').textContent = !host ? 'Only ' + hostName() + ' can start the game.' : n < 2 ? 'Seat at least two players to start.' : full ? 'The table is full at 10 players.' : '';
   $('hostBtn').hidden = host || hostHere() || Date.now() - enteredAt < 8000;
 }
 function statsTable(el) {
@@ -750,73 +1045,131 @@ function statsTable(el) {
       h('td', { text: String(p.k) }), h('td', { text: fmt(p.t) }), h('td', { text: p.k ? fmt(p.t / p.k) : '0:00' }), h('td', { text: fmt(p.mx) })));
   }
 }
+// Pace: players ranked by average turn length, fastest first. Only those who have finished a turn count.
+const avgOf = p => p.k ? p.t / p.k : 0;
+function paceRank(i) {
+  const timed = S.players.filter(p => p.k > 0).sort((a, b) => avgOf(a) - avgOf(b));
+  const at = timed.indexOf(S.players[i]);
+  return at < 0 || timed.length < 2 ? null : [at + 1, timed.length];
+}
+const ordinal = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
+function paceWords(i, you) {
+  const r = paceRank(i);
+  if (!r) return '';
+  return r[0] === 1 ? (you ? 'You are the fastest so far' : 'Fastest so far') : r[0] === r[1] ? (you ? 'You are the slowest so far' : 'Slowest so far') : ordinal(r[0]) + ' fastest of ' + r[1];
+}
+let view = null;   // what the light is showing, worked out in renderPlay and animated in paint
 function paint() {
-  if (S.phase !== 'play') return;
-  const el = elapsed(), lim = S.mode === 'turn' ? S.limit * 1000 : 0, ring = $('ring');
-  let txt = fmt(el), over = false, p = 1;
+  if (S.phase === 'play' || S.phase === 'done') $('gameClock').textContent = fmtLong(gameTime());
+  if (S.phase !== 'play' || !view) return;
+  const el = elapsed(), ring = $('ring');
+  if (S.brkAt) { $('orbTime').textContent = fmt(Date.now() - S.brkAt); ring.style.setProperty('--p', '1'); ring.classList.remove('over', 'slow'); return; }
+  const lim = S.mode === 'turn' ? S.limit * 1000 : 0;
+  let txt = fmt(el), over = false, slow = false, p = 1;
   if (lim) { const left = lim - el; over = left < 0; txt = over ? '+' + fmt(-left) + ' over' : fmt(Math.ceil(left / 1000) * 1000); p = over ? 1 : left / lim; }
+  else if (S.mode === 'turn' && view.avg) { slow = el > view.avg; p = slow ? 1 : el / view.avg; }   // fill toward this player's own average
   $('orbTime').textContent = txt;
-  ring.style.setProperty('--p', p.toFixed(3));
+  if (S.mode === 'turn' && view.stat) $('orbStat').textContent = view.stat(el);
+  if (view.mine && S.mode === 'turn' && !S.paused) $('orbHint').textContent = slow ? 'Past your average. Tap to end turn' : 'Tap to end turn';
+  ring.style.setProperty('--p', Math.max(0, Math.min(1, p)).toFixed(3));
   ring.classList.toggle('over', over && !S.paused);
+  ring.classList.toggle('slow', slow && !over && !S.paused);
 }
 function renderPlay() {
-  const n = S.players.length, me = mySeat(), act = S.players[S.cur], pass = passAround(), seq = upcoming();
-  let state, label, hint, color;
+  const n = S.players.length, me = mySeat(), act = S.players[S.cur], pass = passAround(), seq = upcoming(), live = liveSeats();
+  let state, label, hint, color, statFor = S.cur, mine = false;
   if (S.mode === 'all') {
     const iDone = S.done.includes(myId), left = n - S.done.length;
-    color = me >= 0 ? S.players[me].c : act.c; label = 'Everyone plays';
+    color = me >= 0 ? S.players[me].c : act.c; label = 'Planning';
     state = me >= 0 && iDone ? 'deck' : 'on';
-    hint = me < 0 ? S.done.length + ' of ' + n + ' done' : iDone ? 'Waiting on ' + left + ' more' : 'Tap when you are done';
+    hint = me < 0 ? S.done.length + ' of ' + n + ' ready' : iDone ? 'Ready. Waiting on ' + left + ' more' : 'Tap when you are ready';
+    statFor = -1;
   } else if (pass) { color = act.c; state = 'on'; label = act.n + "'s turn"; hint = 'Tap to end turn'; }
   else if (me < 0) { color = act.c; state = 'deck'; label = act.n + "'s turn"; hint = 'You are watching this game'; }
-  else if (S.cur === me) { color = act.c; state = 'on'; label = 'Your turn'; hint = 'Tap to end turn'; }
-  else if (seq[1] === me) { color = S.players[me].c; state = 'deck'; label = 'On deck'; hint = 'After ' + act.n; }
-  else { color = S.players[me].c; state = 'idle'; label = act.n + "'s turn"; const k = seq.indexOf(me); hint = 'You are up in ' + k + ' turns'; }
-  if (S.paused) hint = 'Paused. Tap to resume';
+  else if (S.cur === me) { color = act.c; state = 'on'; label = 'Your turn'; hint = 'Tap to end turn'; mine = true; }
+  else {
+    color = S.players[me].c; statFor = me;
+    const k = seq.indexOf(me), pace = paceWords(me, true);
+    if (seq[1] === me) { state = 'deck'; label = 'On deck'; hint = 'After ' + act.n; }
+    else { state = 'idle'; label = act.n + "'s turn"; hint = 'You are up in ' + k + ' turns'; }
+    if (pace) hint += '. ' + pace;
+  }
+  if (S.brkAt) { label = 'On a break'; hint = 'Tap when the table is back'; state = 'on'; }
+  else if (S.paused) { hint = (S.mode === 'turn' ? act.n + "'s turn. " : '') + 'Tap to resume'; label = 'Paused'; }
+  const sp = statFor >= 0 ? S.players[statFor] : null, running = statFor === S.cur;
+  view = { mine, avg: running && sp && sp.k ? avgOf(sp) : 0,
+    stat: sp ? el => { const total = sp.t + (running ? el : 0), who = statFor === me && !mine ? 'Your avg ' : 'Avg '; return (sp.k ? who + fmt(avgOf(sp)) + ' · ' : '') + 'Total ' + fmt(total); } : null };
   document.documentElement.style.setProperty('--pc', COLORS[color][1]);
-  $('ring').className = 'ring ' + state + (S.paused ? ' paused' : '');
-  $('orbLabel').textContent = label; $('orbHint').textContent = hint;
-  $('orbLabel').style.fontSize = label.length > 28 ? '17px' : label.length > 16 ? '22px' : '';
+  $('ring').className = 'ring ' + state + (S.paused || S.brkAt ? ' paused' : '');
+  const lab = $('orbLabel');
+  lab.textContent = label; lab.style.fontSize = label.length > 28 ? '17px' : label.length > 16 ? '21px' : '';
+  $('orbHint').textContent = hint;
+  $('orbStat').textContent = S.brkAt ? 'Game clock held at ' + fmtLong(gameTime()) : view.stat && S.mode === 'turn' ? view.stat(elapsed()) : '';
   $('roundLabel').textContent = 'Round ' + S.round;
+  $('nextLabel').textContent = S.mode === 'turn' && n > 1 ? 'Next: ' + S.players[seq[1]].n : '';
+  // Under the light: one clear pause control, which turns into a highlighted resume.
+  const held = !!(S.paused || S.brkAt);
+  $('pauseBtn').hidden = held;
+  $('resumeBig').hidden = !held;
+  $('resumeBig').textContent = S.brkAt ? 'Back to the game' : 'Resume';
+  const absent = S.mode === 'turn' && !pass && S.cur !== me && !live.has(act.id) && !S.brkAt;
+  $('proxyBtn').hidden = !absent;
+  $('proxyBtn').textContent = 'End ' + act.n + "'s turn (no phone)";
+  $('allBackBtn').hidden = S.mode !== 'all' || !!S.brkAt;
+  $('nudgeBtn').textContent = S.cur === me ? 'It is your turn' : 'Nudge ' + act.n;
+  $('nudgeBtn').disabled = S.cur === me || S.mode !== 'turn' || !live.has(act.id) || me < 0;
+  paint();
+}
+let jumpAsk = null;
+function renderMenu() {
+  const inPlay = S.phase === 'play';
+  for (const sec of $('menu').querySelectorAll('[data-phase]')) sec.hidden = sec.dataset.phase !== S.phase;
+  $('soundToggle').checked = sound;
+  [...$('toneSeg').children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === toneIdx)));
+  if (!inPlay) return;
+  const me = mySeat();
   $('modeLabel').textContent = S.limit ? limitName(S.limit) + ' per turn' : 'No turn timer';
   paintTimer($('timerPlay'));
-  const order = $('order'); order.replaceChildren();
-  seq.forEach((i, pos) => order.append(h('li', null, h('span', { class: 'dot', style: '--c:' + COLORS[S.players[i].c][1] }), S.players[i].n + (i === me ? ' (you)' : '') + (pos === 0 ? ' · now' : pos === 1 ? ' · next' : ''))));
-  const proxy = $('proxyBtn');
-  proxy.hidden = S.mode !== 'turn' || pass || S.cur === me;
-  proxy.textContent = 'End ' + act.n + "'s turn for them";
-  $('undoBtn').disabled = !S.h || S.mode !== 'turn';
-  $('pauseBtn').textContent = S.paused ? 'Resume' : 'Pause';
-  $('allBtn').textContent = S.mode === 'all' ? 'Back to turn order' : 'Everyone plays at once';
-  $('allBackBtn').hidden = S.mode !== 'all';
-  $('rotPlay').checked = S.rot;
+  statsTable($('liveStats'));
+  if (jumpAsk && (!S.players.some(p => p.id === jumpAsk) || S.players[S.cur].id === jumpAsk || S.mode !== 'turn')) jumpAsk = null;
   if (!sorting) {
     const pl = $('playSeats'); pl.replaceChildren();
     S.players.forEach((p, i) => {
-      const li = h('li', null, gripFor(p), h('span', { class: 'dot', style: '--c:' + COLORS[p.c][1] }),
-        h('span', { class: 'who', text: (i + 1) + '. ' + p.n }, h('small', { text: i === S.cur ? 'Playing now' : i === me ? 'You' : '' })));
+      const li = h('li', { class: i === S.cur ? 'now' : '' }, gripFor(p), h('span', { class: 'dot', style: '--c:' + COLORS[p.c][1] }),
+        h('span', { class: 'who', text: (i + 1) + '. ' + p.n + (i === me ? ' (you)' : '') }, h('small', { text: i === S.cur ? 'Playing now' : 'Tap to jump to this turn' })));
       li.dataset.id = p.id; pl.append(li);
+      if (p.id === jumpAsk) pl.append(h('li', { class: 'ask' }, h('span', { class: 'who', text: 'Jump to ' + p.n + "'s turn now?" }),
+        h('button', { class: 'btn small', type: 'button', text: 'Jump', onclick: () => { const id = jumpAsk; jumpAsk = null; jumpTo(id); render(); } }),
+        h('button', { class: 'btn small', type: 'button', text: 'Cancel', onclick: () => { jumpAsk = null; render(); } })));
     });
   }
-  statsTable($('liveStats'));
-  paint();
+  $('rotPlay').checked = S.rot;
+  $('undoBtn').disabled = !S.h || S.mode !== 'turn' || !!S.brkAt;
+  $('allBtn').textContent = S.mode === 'all' ? 'End planning phase' : 'Start a planning phase';
+  $('allBtn').disabled = !!S.brkAt;
+  $('breakBtn').textContent = S.brkAt ? 'Back to the game' : 'Take a break';
 }
 function render() {
   const title = (roomCode && S.game) || 'Turnlight';
   if ($('markText').textContent !== title) { $('markText').textContent = title; document.title = title === 'Turnlight' ? title : title + ' · Turnlight'; }
   $('home').hidden = !!roomCode;
   $('lobby').hidden = !roomCode || S.phase !== 'lobby'; $('play').hidden = !roomCode || S.phase !== 'play'; $('done').hidden = !roomCode || S.phase !== 'done';
+  $('menuBtn').hidden = !roomCode;
+  $('gameClock').hidden = !roomCode || S.phase === 'lobby';
   renderClaim(); updateArt();
   if (!roomCode) { setColor(); return; }
-  renderInvite();
+  renderInvite(); renderSync(); renderMenu();
   if (S.phase === 'lobby') { renderLobby(); setColor(); }
   else if (S.phase === 'play') renderPlay();
   else {
-    const turns = S.players.reduce((a, p) => a + p.k, 0), total = S.players.reduce((a, p) => a + p.t, 0);
-    $('doneLine').textContent = turns + ' turns over ' + S.round + (S.round === 1 ? ' round, ' : ' rounds, ') + fmt(total) + ' of thinking time.';
+    const turns = S.players.reduce((a, p) => a + p.k, 0);
+    $('doneLine').textContent = turns + ' turns over ' + S.round + (S.round === 1 ? ' round' : ' rounds') + '. Game time ' + fmtLong(gameTime()) + '.';
     statsTable($('finalStats')); setColor();
+    const timed = S.players.filter(p => p.k > 0).sort((a, b) => avgOf(a) - avgOf(b));
+    $('paceLine').textContent = timed.length > 1 ? 'Quickest turns: ' + timed[0].n + ' (' + fmt(avgOf(timed[0])) + ' on average). Slowest: ' + timed[timed.length - 1].n + ' (' + fmt(avgOf(timed[timed.length - 1])) + ').' : '';
     $('againBtn').disabled = !isHost();
     $('againHint').textContent = isHost() ? '' : 'Only ' + hostName() + ' can start a new game.';
+    paint();
   }
   const key = [S.phase, S.mode, S.cur, S.round, S.aid, S.start].join('|');
   if (lastKey !== null && key !== lastKey && S.phase === 'play' && !S.paused) {
@@ -829,85 +1182,115 @@ function setColor() {
   const me = mySeat();
   document.documentElement.style.setProperty('--pc', COLORS[me >= 0 ? S.players[me].c : draftColor][1]);
 }
-function buzz() {
-  try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {}
-  if (!sound || !audio) return;
-  try {
-    const t = audio.currentTime;
-    [660, 880].forEach((f, i) => {
-      const o = audio.createOscillator(), g = audio.createGain();
-      o.frequency.value = f; o.connect(g); g.connect(audio.destination);
-      g.gain.setValueAtTime(0.0001, t + i * 0.16); g.gain.exponentialRampToValueAtTime(0.25, t + i * 0.16 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.16 + 0.15);
-      o.start(t + i * 0.16); o.stop(t + i * 0.16 + 0.16);
-    });
-  } catch {}
-}
-function wake() {
-  try { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume().catch(() => {}); } catch {}
-  try { if (navigator.wakeLock && S.phase === 'play') navigator.wakeLock.request('screen').catch(() => {}); } catch {}
-}
+function openMenu(open) { $('menu').hidden = !open; if (open) { renderMenu(); $('menuClose').focus(); } else { jumpAsk = null; $('menuBtn').focus(); } }
 
 /* ---------- wiring ---------- */
 function wire() {
   document.addEventListener('click', wake);
   buildTimer($('timerLobby'), 'lobbyTimer'); buildTimer($('timerPlay'), 'playTimer');
   for (const id of ['rotToggle', 'rotPlay']) $(id).addEventListener('change', e => commit(s => { s.rot = e.target.checked; }));
+
+  // Lobby: take a seat, add phone-less players, shuffle.
+  $('nameInput').addEventListener('input', paintJoin);
   $('seatForm').addEventListener('submit', e => {
     e.preventDefault();
     const input = $('nameInput'), n = input.value.trim().slice(0, 36);
-    if (!n) { input.focus(); return; }
-    if (mySeat() < 0) {
-      const live = liveSeats(), old = S.players.find(p => p.n.toLowerCase() === n.toLowerCase() && !live.has(p.id));
-      if (old) { input.value = ''; claimSeat(old.id); return; }
-    }
-    const own = mySeat() < 0, id = own ? myId : rand();
-    if (own) pendingSeat = { id, n, c: draftColor, until: Date.now() + 4000 };
-    addSeat(id, n, draftColor); input.value = '';
+    if (!n || mySeat() >= 0) { input.focus(); return; }
+    const live = liveSeats(), old = S.players.find(p => p.n.toLowerCase() === n.toLowerCase() && !live.has(p.id));
+    input.value = '';
+    if (old) { claimSeat(old.id); return; }   // same name as an empty seat: take that seat back
+    pendingSeat = { id: myId, n, c: draftColor, until: Date.now() + 4000 };
+    addSeat(myId, n, draftColor);
   });
+  $('extraForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = $('extraInput'), n = input.value.trim().slice(0, 36);
+    if (!n) { input.focus(); return; }
+    const taken = new Set(S.players.map(p => p.c)); if (mySeat() < 0) taken.add(draftColor);
+    const c = COLORS.findIndex((_, i) => !taken.has(i));
+    addSeat(rand(), n, c < 0 ? 0 : c); input.value = '';
+  });
+  $('shuffleBtn').addEventListener('click', shuffleOrder);
+  $('firstBtn').addEventListener('click', () => { const p = randomFirst(); if (p) toast(p.n + ' goes first'); });
   const setGame = () => { const v = $('gameInput').value.replace(/\s+/g, ' ').trim().slice(0, 36); if (v !== S.game) commit(s => { s.game = v; }); };
   $('gameInput').addEventListener('change', setGame);
+  $('gameInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
   $('artInput').addEventListener('change', e => {
     const raw = e.target.value.trim(), v = cleanArt(raw);
     $('artHint').textContent = raw && !v ? 'That is not a usable link. It has to start with https:// and point at a picture.' : 'Leave empty to look for a picture of the game automatically.';
     if (v !== S.art && (v || !raw)) commit(s => { s.art = v; });
   });
   $('artInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
-  $('gameInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
   $('startBtn').addEventListener('click', () => { setGame(); startGame(); });
+  $('hostBtn').addEventListener('click', () => commit(s => { s.host = myId; }));
   makeSortable($('seats')); makeSortable($('playSeats'));
+
+  // The light.
   $('orb').addEventListener('click', () => {
+    if (S.brkAt) return endBreak();
     if (S.paused) return togglePause();
     if (S.mode === 'all') { if (mySeat() >= 0) markDone(); return; }
-    if (passAround() || S.cur === mySeat()) endTurn();
+    if (passAround() || S.cur === mySeat()) { endTurn(); toast('Turn ended', 'Undo', undo, 5000); }
   });
-  $('proxyBtn').addEventListener('click', endTurn);
-  $('undoBtn').addEventListener('click', undo);
   $('pauseBtn').addEventListener('click', togglePause);
-  $('modeBtn').addEventListener('click', () => { const p = $('timerPanel'), open = p.hidden; p.hidden = !open; $('modeBtn').setAttribute('aria-expanded', String(open)); $('modeCaret').textContent = open ? '▴' : '▾'; });
-  $('allBtn').addEventListener('click', toggleAll);
+  $('resumeBig').addEventListener('click', () => { if (S.brkAt) endBreak(); else if (S.paused) togglePause(); });
+  $('proxyBtn').addEventListener('click', () => { endTurn(); toast('Turn ended', 'Undo', undo, 5000); });
   $('allBackBtn').addEventListener('click', () => { if (S.mode === 'all') toggleAll(); });
+
+  // Swipe between the light and table talk.
+  const pager = $('pager'), tabs = [$('tabMain'), $('tabTalk')];
+  const showTab = i => tabs.forEach((t, j) => t.setAttribute('aria-pressed', String(i === j)));
+  tabs.forEach((t, i) => t.addEventListener('click', () => { showTab(i); try { pager.scrollTo({ left: i * pager.clientWidth, behavior: 'smooth' }); } catch { pager.scrollLeft = i * pager.clientWidth; } }));
+  pager.addEventListener('scroll', () => showTab(pager.scrollLeft > pager.clientWidth / 2 ? 1 : 0), { passive: true });
+  EMOJI.forEach((ch, i) => $('emoGrid').append(h('button', { class: 'btn', type: 'button', text: ch, 'aria-label': 'Send ' + ch, onclick: () => sendFx('emo', i) })));
+  BOARD.forEach(([name], i) => $('boardGrid').append(h('button', { class: 'btn', type: 'button', text: name, onclick: () => { if (!sendFx('snd', i)) toast('Give it a second'); } })));
+  $('nudgeBtn').addEventListener('click', () => {
+    const act = S.players[S.cur], me = S.players[mySeat()];
+    if (!act || !me || act.id === myId) return;
+    toast(sendFx('nudge', 0, { to: act.id, n: me.n }) ? 'Nudged ' + act.n : 'Give them a few seconds');
+  });
+
+  // Menu.
+  $('menuBtn').addEventListener('click', () => openMenu(true));
+  $('menuClose').addEventListener('click', () => openMenu(false));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('menu').hidden) openMenu(false); });
+  $('playSeats').addEventListener('click', e => {
+    const li = e.target.closest && e.target.closest('li[data-id]');
+    if (!li || e.target.closest('button') || Date.now() - dragEndedAt < 500 || S.mode !== 'turn') return;
+    const id = li.dataset.id;
+    jumpAsk = jumpAsk === id || S.players[S.cur].id === id ? null : id;
+    render();
+  });
+  $('undoBtn').addEventListener('click', undo);
+  $('allBtn').addEventListener('click', () => { toggleAll(); openMenu(false); });
+  $('breakBtn').addEventListener('click', () => { if (S.brkAt) endBreak(); else takeBreak(); openMenu(false); });
+  $('soundToggle').addEventListener('change', e => { sound = e.target.checked; lsSet('turnlight-sound', sound ? '1' : '0'); });
+  TONES.forEach(([name], i) => $('toneSeg').append(h('button', { type: 'button', text: name, 'aria-pressed': 'false', onclick: () => { toneIdx = i; lsSet('turnlight-tone', String(i)); renderMenu(); wake(); play(TONES[i][1]); } })));
   let armed = 0;
   $('endBtn').addEventListener('click', e => {
-    if (Date.now() < armed) { armed = 0; e.target.textContent = 'End game'; endGame(); return; }
+    if (Date.now() < armed) { armed = 0; e.target.textContent = 'End game'; endGame(); openMenu(false); return; }
     armed = Date.now() + 3000; e.target.textContent = 'Tap again to end the game';
     setTimeout(() => { if (armed && Date.now() >= armed) { armed = 0; e.target.textContent = 'End game'; } }, 3100);
   });
+  $('leaveBtn').addEventListener('click', () => { lsSet('turnlight-last', ''); location.hash = ''; });
+
+  // End screen.
   $('againBtn').addEventListener('click', startGame);
   $('resumeBtn').addEventListener('click', resumeGame);
-  $('hostBtn').addEventListener('click', () => commit(s => { s.host = myId; }));
   $('lobbyBtn').addEventListener('click', () => commit(s => { s.phase = 'lobby'; }));
-  $('soundBtn').addEventListener('click', e => { sound = !sound; lsSet('turnlight-sound', sound ? '1' : '0'); e.target.textContent = sound ? 'Sound on' : 'Sound off'; e.target.setAttribute('aria-pressed', String(sound)); });
-  setInterval(paint, 250);
-  setInterval(() => { if (roomCode) beat(); }, 4000);
+
+  // Home and invites.
   $('newBtn').addEventListener('click', () => { let c = ''; const abc = 'abcdefghjkmnpqrstuvwxyz23456789'; for (let i = 0; i < 6; i++) c += abc[Math.floor(Math.random() * abc.length)]; enterRoom(c); if (!S.host) commit(s => { s.host = myId; }); });
   $('joinForm').addEventListener('submit', e => { e.preventDefault(); const c = cleanCode($('codeInput').value); if (c) enterRoom(c); else $('codeInput').focus(); });
   $('rejoinBtn').addEventListener('click', () => { const c = cleanCode(lsGet('turnlight-last') || ''); if (c) enterRoom(c); });
-  $('leaveBtn').addEventListener('click', () => { lsSet('turnlight-last', ''); location.hash = ''; });
   $('copyBtn').addEventListener('click', e => {
     const done = ok => { e.target.textContent = ok ? 'Link copied' : 'Select the link above to copy'; setTimeout(() => { e.target.textContent = 'Copy link'; }, 2000); };
     try { navigator.clipboard.writeText(tableLink()).then(() => done(true), () => done(false)); } catch { done(false); }
   });
   $('shareBtn').addEventListener('click', () => { try { navigator.share({ title: 'Turnlight', text: 'Join my table on Turnlight', url: tableLink() }).catch(() => {}); } catch {} });
+
+  setInterval(paint, 250);
+  setInterval(() => { if (roomCode) beat(); }, 4000);
   window.addEventListener('hashchange', () => { if (cleanCode(location.hash.slice(1)) !== roomCode) location.reload(); });
   window.addEventListener('pagehide', () => { if (roomCode) beat(true); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && roomCode) { beat(); schedule(); wake(); } });
@@ -926,7 +1309,7 @@ function start() {
   if (!/^[a-z0-9]{1,16}$/.test(myId)) myId = rand();
   lsSet('turnlight-id', myId);
   sound = lsGet('turnlight-sound') !== '0';
-  $('soundBtn').textContent = sound ? 'Sound on' : 'Sound off'; $('soundBtn').setAttribute('aria-pressed', String(sound));
+  toneIdx = int(parseInt(lsGet('turnlight-tone') || '0', 10), 0, TONES.length - 1, 0);
   wire();
   const code = cleanCode(location.hash.slice(1)), last = cleanCode(lsGet('turnlight-last') || '');
   if (code) enterRoom(code);
