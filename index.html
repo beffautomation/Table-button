@@ -594,6 +594,8 @@ function paintTimer(box) {
    Looks the game name up on Wikipedia and uses the article's freely licensed
    photo. Only an exact title match on an article described as a game counts;
    anything less sure leaves the plain background. */
+// Address of the picture relay (see relay/worker.js). Empty means BoardGameGeek lookups are off.
+const BGG_RELAY = window.TURNLIGHT_RELAY || '';
 const artCache = new Map();
 let artFor = null;
 const normTitle = s => String(s).toLowerCase().replace(/\s*\([^)]*\)\s*$/, '').replace(/&/g, 'and').replace(/^the\s+/, '').replace(/[^a-z0-9]+/g, '');
@@ -644,6 +646,15 @@ async function getPages(url) {
 async function findArt(name) {
   if (artCache.has(name)) return artCache.get(name);
   let art = null;
+  if (BGG_RELAY) {
+    try {
+      const r = await fetch(BGG_RELAY + '?name=' + encodeURIComponent(name));
+      const j = r.ok ? await r.json() : null;
+      if (j && j.found && /^\d+$/.test(String(j.id)) && cleanArt(j.image) && /^https:\/\/[a-z0-9.-]*geekdo-images\.com\//.test(j.image))
+        art = { url: j.image, title: String(j.name || name), link: 'https://boardgamegeek.com/boardgame/' + j.id, credit: 'Powered by BGG' };
+    } catch {}
+  }
+  if (art) { artCache.set(name, art); return art; }
   const article = pickArticle(name, await getPages(WIKI + 'generator=search&gsrlimit=8&gsrsearch=' + encodeURIComponent(name + ' game') + '&prop=pageimages%7Cdescription&piprop=thumbnail&pithumbsize=1000&pilicense=any'));
   if (article && article.url) art = { url: article.url, title: article.title, link: 'https://en.wikipedia.org/wiki/' + encodeURIComponent(article.title.replace(/ /g, '_')) };
   if (!art && article) art = pickFile(name, await getPages(WIKI + 'generator=images&gimlimit=50&titles=' + encodeURIComponent(article.title) + INFO), true);
@@ -665,7 +676,7 @@ function showArt(art) {
     if (artFor !== art.name) return;
     el.style.backgroundImage = 'url("' + art.url.replace(/["\\\n]/g, '') + '")'; el.classList.add('show');
     el.classList.toggle('soft', img.naturalWidth < 700);   // small pictures get a soft blur so they do not look pixelated
-    $('artLink').href = art.link;
+    $('artLink').href = art.link; $('artLink').textContent = art.credit || 'Background picture source';
     $('artCredit').hidden = false;
   };
   img.src = art.url;
