@@ -1,4 +1,4 @@
-// Turnlight picture relay (Cloudflare Worker).
+// UTurn picture relay (Cloudflare Worker).
 // Looks a board game up on BoardGameGeek by exact name and returns its picture.
 // The BGG access token stays here as a secret named BGG_TOKEN and never reaches the page.
 //
